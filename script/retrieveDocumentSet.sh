@@ -1,19 +1,19 @@
 #! /bin/bash
 curl -v --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap-api/PHRService/1.3.0' \
 --header 'Content-Type: application/xml' \
---insecure --cert-type P12 --cert ../cert/ps_epa_consol_01.p12:00 \
+--insecure --cert-type P12 --cert ./cert/ps_epa_consol_01.p12:00 \
 --data-raw '<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:m0="http://ws.gematik.de/conn/ConnectorContext/v2.0" xmlns:m1="http://ws.gematik.de/conn/ConnectorCommon/v5.0" xmlns:m2="http://ws.gematik.de/fa/phr/v1.1">
   <soap:Header>
     <m:ContextHeader xmlns:m="http://ws.gematik.de/conn/phrs/PHRService/v1.3">
       <m0:Context>
-        <m1:MandantId>PS-Beispielmandant</m1:MandantId>
-        <m1:ClientSystemId>PS-Beispielmandant</m1:ClientSystemId>
+        <m1:MandantId>ps_epa_consol_01</m1:MandantId>
+        <m1:ClientSystemId>ps_epa_consol_01</m1:ClientSystemId>
         <m1:WorkplaceId>CATS</m1:WorkplaceId>
       </m0:Context>
       <m:RecordIdentifier>
-        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110419532"/>
-        <m2:HomeCommunityId>urn:oid:1.2.276.0.76.3.1.405</m2:HomeCommunityId>
+        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110404542"/>
+        <m2:HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</m2:HomeCommunityId>
       </m:RecordIdentifier>
     </m:ContextHeader>
     <Action xmlns="http://www.w3.org/2005/08/addressing">urn:ihe:iti:2007:RetrieveDocumentSet</Action>
@@ -25,12 +25,14 @@ curl -v --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap
   </soap:Header>
   <soap:Body>
     <RetrieveDocumentSetRequest xmlns="urn:ihe:iti:xds-b:2007">
-      <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
-        <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.315.3.2.1.1</HomeCommunityId>
-        <RepositoryUniqueId>1.2.276.0.76.3.1.315.3.2.1.1</RepositoryUniqueId>
-        <DocumentUniqueId>2.25.267645514103652999984</DocumentUniqueId>
-      </DocumentRequest>
 
+      <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
+        <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</HomeCommunityId>
+        <RepositoryUniqueId>1.2.276.0.76.3.1.91.1</RepositoryUniqueId>
+        <DocumentUniqueId>2.25.102925591037611682627</DocumentUniqueId>
+      </DocumentRequest>
     </RetrieveDocumentSetRequest>
   </soap:Body>
-</soap:Envelope>'
+</soap:Envelope>
+' \
+# | sed -e '1,5 d; $ d' | xmllint --format -

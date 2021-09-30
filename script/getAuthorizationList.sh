@@ -1,7 +1,7 @@
 #! /bin/bash
-curl --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap-api/PHRManagementService/1.3.0' \
+curl --location --request POST 'https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0' \
 --header 'Content-Type: application/xml' \
---insecure --cert-type P12 --cert ../cert/ps_epa_consol_01.p12:00 \
+--insecure --cert-type P12 --cert ./cert/ps_epa_consol_01.p12:00 \
 --data-raw '<?xml version="1.0" encoding="UTF-8"?>
 <SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope" xmlns:SOAP-ENC="http://www.w3.org/2003/05/soap-encoding" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:m0="http://ws.gematik.de/conn/ConnectorContext/v2.0" xmlns:m1="http://ws.gematik.de/conn/ConnectorCommon/v5.0">
   <SOAP-ENV:Header>
