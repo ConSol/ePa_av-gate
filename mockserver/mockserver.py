@@ -15,3 +15,6 @@ def soap():
   response.headers.set('Content-Type', 'application/xop+xml; type="application/soap+xml"')
   response.headers.set('Content-Transfer-Encoding', 'binary')
   return response
+
+if __name__ == '__main__':
+    app.run(host="::", port=5000, debug=True)
