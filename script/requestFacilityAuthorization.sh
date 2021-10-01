@@ -19,21 +19,21 @@ curl --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap-ap
         <m1:ClientSystemId>ps_epa_consol_01</m1:ClientSystemId>
         <m1:WorkplaceId>CATS</m1:WorkplaceId>
       </m0:Context>
-      <m1:EhcHandle>b2aa571b-071b-4743-9a67-4123cb7ca33c</m1:EhcHandle>
+      <m1:EhcHandle>X110404542</m1:EhcHandle>
       <m:AuthorizationConfiguration>
-        <m:Vers_Docs>false</m:Vers_Docs>
+        <m:Vers_Docs>true</m:Vers_Docs>
         <m:LE_Docs>true</m:LE_Docs>
-        <m:KTR_Docs>false</m:KTR_Docs>
-        <m:ExpirationDate>2021-01-15</m:ExpirationDate>
+        <m:KTR_Docs>true</m:KTR_Docs>
+        <m:ExpirationDate>2021-12-31</m:ExpirationDate>
       </m:AuthorizationConfiguration>
       <m:RecordIdentifier>
-        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110419532"/>
+        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110404542"/>
         <m2:HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</m2:HomeCommunityId>
       </m:RecordIdentifier>
-      <m:OrganizationName>1-2-ARZT-MarthaOberhausen01</m:OrganizationName>
+      <m:OrganizationName>Arztpraxis Martha Oberhausen TEST-ONLY</m:OrganizationName>
       <m:InsurantName>
         <m:Vorname>Ullrich</m:Vorname>
-        <m:Nachname>Wendler-SchonhäuserTEST-ONLY</m:Nachname>
+        <m:Nachname>Freiherr Wendler-SchonhäuserTEST-ONLY</m:Nachname>
       </m:InsurantName>
     </m:RequestFacilityAuthorization>
   </SOAP-ENV:Body>
