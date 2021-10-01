@@ -5,6 +5,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Python: Aktuelle Datei",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal"
+    },
+
+    {
       "name": "Python: Flask",
       "type": "python",
       "request": "launch",
@@ -13,10 +21,7 @@
         "FLASK_APP": "mockserver/mockserver.py",
         "FLASK_ENV": "development"
       },
-      "args": [
-        "run",
-        "--no-debugger"
-      ],
+      "args": ["run", "--no-debugger"],
       "jinja": true
     }
   ]
