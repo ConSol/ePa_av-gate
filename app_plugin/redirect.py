@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class RedirectPlugin(HttpProxyBasePlugin):
     """Modifies client request to redirect all incoming requests to a fixed server address."""
 
-    UPSTREAM_SERVER = b'http://localhost:5000'
+    UPSTREAM_SERVER = b'http://localhost:5000/soap-api'
 
     def before_upstream_connection(
             self, request: HttpParser) -> Optional[HttpParser]:
@@ -24,7 +24,7 @@ class RedirectPlugin(HttpProxyBasePlugin):
             request.add_header(
                 b'Host', urlparse.urlsplit(
                     self.UPSTREAM_SERVER).netloc)
-        logger.info('request', request.headers)
+        logger.warn('request-header')
         return request
 
     def handle_client_request(
@@ -32,7 +32,6 @@ class RedirectPlugin(HttpProxyBasePlugin):
         return request
 
     def handle_upstream_chunk(self, chunk: memoryview) -> memoryview:
-        print(1)
         return chunk
 
     def on_upstream_connection_close(self) -> None:

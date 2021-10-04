@@ -1,4 +1,4 @@
 from .redirect import RedirectPlugin
-from .message_av import MessageAV
+from .message_av import MessageAVPlugin
 
-__all__ = [RedirectPlugin, MessageAV]
+__all__ = [RedirectPlugin, MessageAVPlugin]
