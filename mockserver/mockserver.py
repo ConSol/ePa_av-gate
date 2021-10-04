@@ -11,7 +11,7 @@ def root():
 
 @app.route("/soap-api")
 def soap():
-    fn = open("./samples/retrievedocument-resp", "br")
+    fn = open("./samples/retrievedocument-resp_eicar", "br")
     b = io.BytesIO(fn.read())
     response = send_file(b, mimetype="application/xop+xml; type='application/soap+xml'", as_attachment=False)
     response.headers.set("Content-Transfer-Encoding", "binary")
