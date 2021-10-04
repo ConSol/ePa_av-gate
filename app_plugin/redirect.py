@@ -1,6 +1,6 @@
 import logging
 from urllib import parse as urlparse
-from typing import Optional
+from typing import Any, Optional
 
 from proxy.http.proxy import HttpProxyBasePlugin
 from proxy.http.parser import HttpParser
@@ -12,6 +12,12 @@ class RedirectPlugin(HttpProxyBasePlugin):
     """Modifies client request to redirect all incoming requests to a fixed server address."""
 
     UPSTREAM_SERVER = b'http://localhost:5000/soap-api'
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+        # set logger for process
+        logging.basicConfig(level=self.flags.log_level, format=self.flags.log_format)
 
     def before_upstream_connection(
             self, request: HttpParser) -> Optional[HttpParser]:
