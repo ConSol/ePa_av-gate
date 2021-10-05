@@ -9,7 +9,7 @@ def root():
     return "up and running"
 
 
-@app.route("/soap-api")
+@app.route("/soap-api/PHRService/1.3.0", methods=["POST", "GET"])
 def soap():
     fn = open("./samples/retrievedocument-resp_eicar", "br")
     b = io.BytesIO(fn.read())
