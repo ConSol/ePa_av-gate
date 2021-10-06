@@ -34,4 +34,4 @@ def soap():
 
 
 if __name__ == "__main__":
-    app.run(host="::", port=5000, debug=True)
+    app.run(host="::", port=5000, debug=True, ssl_context='adhoc')

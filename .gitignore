@@ -1,3 +1,5 @@
 venv
 out
+out2
+settings.json
 **/__pycache__/*
