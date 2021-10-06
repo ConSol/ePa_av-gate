@@ -2,10 +2,11 @@
 
 - [x] SOAP-Request für retrieveDocument auf Titus
 - [x] Proxy Framework einrichten
-- [ ] Forward Routing für Requests
-- [ ] Response Filter
-- [ ] Response split multipart message
-- [ ] Logging für Multithreading
+- [x] Forward Routing für Requests
+- [x] Response Filter
+- [x] Response split multipart message
+- [x] Logging für Multithreading
+- [ ] Routing für Konnektoren (über DNS Alias statt Proxy)
 - [ ] Einrichten auf Ubuntu (AV, nginx, python)
 - [ ] TLS & Zertifikate
 
@@ -25,4 +26,6 @@ In den Anfragen sind jeweils als Kontext angegeben - ich könnte mir vorstellen,
   <m1:WorkplaceId>CATS</m1:WorkplaceId>
 </m0:Context>
 ```
+
+- Woher bekomme ich die Client-Zertifikate?
 
