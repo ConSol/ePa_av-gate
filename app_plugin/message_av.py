@@ -23,6 +23,7 @@ class MessageAVPlugin(HttpProxyBasePlugin):
 
         # Create a new http protocol parser for response payloads
         self.response = HttpParser(httpParserTypes.RESPONSE_PARSER)
+        self.retrieve_document = False
 
         # set logger for process
         logging.basicConfig(level=self.flags.log_level, format=self.flags.log_format)
@@ -31,7 +32,8 @@ class MessageAVPlugin(HttpProxyBasePlugin):
         return request
 
     def handle_client_request(self, request: HttpParser) -> Optional[HttpParser]:
-        self.retrieve_document = reg_retrieve_document.search(request.body) != None
+        if request.method != b'CONNECT':
+            self.retrieve_document = reg_retrieve_document.search(request.body) != None
         return request
 
     def handle_upstream_chunk(self, chunk: memoryview) -> memoryview:
@@ -66,7 +68,7 @@ class MessageAVPlugin(HttpProxyBasePlugin):
             scan_res = cd.instream(io.BytesIO(att.get_content()))["stream"]
             content_id = att["Content-ID"]
             if scan_res[0] == "OK":
-                logger.info(f"scan ${content_id} : ${scan_res}")
+                logger.info(f"scanned ${content_id} : ${scan_res}")
             else:
                 logger.info(f"virus found ${content_id} : ${scan_res}")
 
