@@ -4,8 +4,19 @@
   // Weitere Informationen finden Sie unter https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
+
+
     {
-      "name": "Python: av-proxy",
+      "name": "AV Gate",
+      "type": "python",
+      "request": "launch",
+      "module": "flask",
+      "env": { "FLASK_APP": "av_gate.py", "FLASK_ENV": "development" },
+      "args": ["run", "--no-debugger", "--port", "5001"],
+      "jinja": true
+    },
+    {
+      "name": "AV Proxy",
       "type": "python",
       "request": "launch",
       "program": "av_proxy.py",
@@ -13,7 +24,7 @@
     },
 
     {
-      "name": "Python: Flask",
+      "name": "Mockserver",
       "type": "python",
       "request": "launch",
       "module": "flask",

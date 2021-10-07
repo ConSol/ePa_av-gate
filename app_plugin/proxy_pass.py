@@ -5,7 +5,7 @@ from typing import Any, Optional
 from proxy.http.proxy import HttpProxyBasePlugin
 from proxy.http.parser import HttpParser
 
-UPSTREAM_SERVER = b"http://localhost:1080"
+UPSTREAM_SERVER = b"http://127.0.0.1:1080"
 
 logger = logging.getLogger(__name__)
 

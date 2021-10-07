@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 cd = clamd.ClamdUnixSocket(path="/tmp/clamd.socket")
 reg_retrieve_document = re.compile(b"RetrieveDocumentSetRequest")
 
+UPSTREAM_SERVER = b"http://127.0.0.1:1080"
+
 
 class MessageAVPlugin(HttpProxyBasePlugin):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -29,6 +31,7 @@ class MessageAVPlugin(HttpProxyBasePlugin):
         logging.basicConfig(level=self.flags.log_level, format=self.flags.log_format)
 
     def before_upstream_connection(self, request: HttpParser) -> Optional[HttpParser]:
+        request.set_url(UPSTREAM_SERVER + request.url.path)
         return request
 
     def handle_client_request(self, request: HttpParser) -> Optional[HttpParser]:
