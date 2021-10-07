@@ -8,11 +8,12 @@ import requests
 from flask import Flask, Response, request
 
 CLAMD_SOCKET = "/tmp/clamd.socket"
-UPSTREAM_SERVER = "https://127.0.0.1:5000"
+UPSTREAM_SERVER = "https://kon-instanz1.titus.ti-dienste.de" # "https://127.0.0.1:5000"
 PROXY_SSL_CERT = "cert/ps_epa_consol_01.crt"
 PROXY_SSL_KEY = "cert/ps_epa_consol_01.key"
+SSL_VERIFY = True
+
 VIRUS_MSG = "Das Dokument ist mit einem Virus infiziert und wird nicht übertragen."
-SSL_VERIFY = False
 
 cd = clamd.ClamdUnixSocket(path=CLAMD_SOCKET)
 reg_retrieve_document = re.compile(b"RetrieveDocumentSetRequest")
@@ -25,11 +26,12 @@ def hello():
     return "up and running 2"
 
 @app.route("/<path:path>", methods=["POST"])
-def any(path):
+def soap(path):
     # get data from upstream
     upstream = requests.post(
-        f"{UPSTREAM_SERVER}/{request.path}",
+        f"{UPSTREAM_SERVER}{request.path}",
         headers=request.headers,
+        data=request.get_data(),
         cert=(PROXY_SSL_CERT, PROXY_SSL_KEY),
         verify=SSL_VERIFY,
     )
@@ -41,7 +43,10 @@ def any(path):
 
     # copy headers from upstream response
     for k, v in upstream.headers.items():
-        response.headers[k] = v
+        if k not in ["Transfer-Encoding", "Content-Length"]:
+            response.headers[k] = v
+
+    response.headers["Content-Length"] = str(response.content_length)
 
     return response
 
