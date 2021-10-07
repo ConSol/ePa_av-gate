@@ -6,6 +6,7 @@
 - [x] Response Filter
 - [x] Response split multipart message
 - [x] Logging für Multithreading
+- [x] TLS für Verbindung zum Client (kein Proxy)
 - [ ] Routing für Konnektoren (über DNS Alias statt Proxy)
 - [ ] Einrichten auf Ubuntu (AV, nginx, python)
 - [ ] TLS & Zertifikate
