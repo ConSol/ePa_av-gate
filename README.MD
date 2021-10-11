@@ -58,5 +58,30 @@ Aktuell fungiert NGINX ausschließlich als Proxy für die Verbindungen vom Clien
 
 ## Architektur
 
-TBD
+Für die Primärsoftware wird als Konnektor der nginx-Server mit AV-Gate konfiguriert.
 
+nginx terminiert TLS und richt die Anfrage an das AV-Gate weiter.
+
+AV-Gate ermittelt den passenden Konnektur über eine .ini-Datei und reicht die Anfrage weiter.
+
+AV-Gate ersetzt den Endpunkt im Response zu connector.sls für `PHRService`, zu dem der Aufruf `RetrieveDocumentSetRequest`gehört.
+
+AV-Gate enpackt die Dokumente aus der Response zu `RetrieveDocumentSetRequest` und scannt die einzelnen Dokumente via ClamAV über eine Socket-Verbindung. Wird ein Virus gefunden, wir die Nachricht durch einen Hinweistext ersetzt.
+
+```mermaid
+graph LR
+PrimärSoftware -->|TLS| nginx
+nginx -.-> AV-Gate
+AV-Gate -.scan.-> ClamAV
+AV-Gate -->|TLS| Konnektor
+```
+
+AV-Gate kennt keine Schemata und sollte auch mit künftigen Versionen der Gematik ePA Api funktionieren. Vorausgesetzt `connector.sls` und `RetrieveDocuemntSetRequests` werden genutzt.
+
+--
+
+Consol GmbH
+
+Norbert Ferchen
+
+Oktober 2021
