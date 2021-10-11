@@ -1,4 +1,4 @@
-# AV-Proxy
+# AV-Gate
 
 Proxy für den Gematik Konnektor zum AV-Scan von herungergeladener Dokumente.
 
