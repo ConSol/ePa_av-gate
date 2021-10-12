@@ -68,7 +68,7 @@ def soap(path):
 def request_upstream() -> Response:
     remote_addr = request.remote_addr
 
-    if not config.get(remote_addr):
+    if not config.has_section(remote_addr):
         raise KeyError(f"Client ${remote_addr} not found in av_gate.ini")
 
     cfg = config[remote_addr]
