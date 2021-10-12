@@ -8,7 +8,7 @@ import clamd
 import requests
 from flask import Flask, Response, request
 
-__version__ = "0.3"
+__version__ = "0.4"
 
 ALL_METHODS = [
     "GET",
