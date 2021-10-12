@@ -8,6 +8,8 @@ import clamd
 import requests
 from flask import Flask, Response, request
 
+__version__ = "0.3"
+
 ALL_METHODS = [
     "GET",
     "HEAD",
@@ -27,11 +29,12 @@ clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
 
 reg_retrieve_document = re.compile(b"RetrieveDocumentSetRequest")
 reg_phr_service_endpoint = re.compile(
-    b'^(.*?<si:Service Name="PHRService">.*?<si:EndpointTLS Location="https://)(.*?)(/.*)$',
+    b'^(.*?<.+?:Service Name="PHRService">.*?<.+?:EndpointTLS Location="https://)(.*?)(/.*)$',
     re.DOTALL,
 )
 
 app = Flask(__name__)
+app.logger.setLevel("INFO")
 
 
 @app.route("/connector.sds", methods=["GET"])
@@ -59,13 +62,13 @@ def soap(path):
     else:
         data = upstream.content
 
-    return create_response(data)
+    return create_response(data, upstream)
 
 
 def request_upstream() -> Response:
     remote_addr = request.remote_addr
 
-    if not config[remote_addr]:
+    if not config.get(remote_addr):
         raise KeyError(f"Client ${remote_addr} not found in av_gate.ini")
 
     cfg = config[remote_addr]
@@ -92,11 +95,11 @@ def request_upstream() -> Response:
     return response
 
 
-def create_response(data) -> Response:
+def create_response(data, upstream: Response) -> Response:
     response = Response(data)
 
     # copy headers from upstream response
-    for k, v in request.headers.items():
+    for k, v in upstream.headers.items():
         if k not in ["Transfer-Encoding", "Content-Length"]:
             response.headers[k] = v
 
