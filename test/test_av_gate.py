@@ -6,6 +6,7 @@ def test_connector_sds(monkeypatch):
     "check endpoint is replaced"
 
     class MockResponse:
+        headers = { "Test-Header": "bla" }
         content = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sd:ConnectorServices xmlns:pi="http://ws.gematik.de/int/version/ProductInformation/v1.1" xmlns:sd="http://ws.gematik.de/conn/ServiceDirectory/v3.1" xmlns:si="http://ws.gematik.de/conn/ServiceInformation/v2.0">
     <pi:ProductInformation>

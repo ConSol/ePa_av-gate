@@ -8,7 +8,7 @@ import clamd
 import requests
 from flask import Flask, Response, request
 
-__version__ = "0.4"
+__version__ = "0.5"
 
 ALL_METHODS = [
     "GET",
@@ -42,15 +42,15 @@ def connector_sds():
     """resplace the endpoint für PHRService with our address"""
     # <si:Service Name="PHRService">
     # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRService/1.3.0"/>
-    response = request_upstream()
+    upstream = request_upstream()
 
-    m = reg_phr_service_endpoint.match(response.content)
+    m = reg_phr_service_endpoint.match(upstream.content)
     if not m:
         KeyError("connector.sds does not contain PHRService location.")
 
     data = m.group(1) + bytes(request.host, "ASCII") + m.group(3)
 
-    return create_response(data)
+    return create_response(data, upstream)
 
 
 @app.route("/<path:path>", methods=ALL_METHODS)
@@ -69,7 +69,7 @@ def request_upstream() -> Response:
     remote_addr = request.remote_addr
 
     if not config.has_section(remote_addr):
-        raise KeyError(f"Client ${remote_addr} not found in av_gate.ini")
+        raise KeyError(f"Client {remote_addr} not found in av_gate.ini")
 
     cfg = config[remote_addr]
     konn = cfg["Konnektor"]
@@ -90,7 +90,7 @@ def request_upstream() -> Response:
     )
 
     if bytes(konn, "ASCII") in response.content:
-        app.logger.warn(f"Found Konnektor Address in response: {konn} - {request.path}")
+        app.logger.warning(f"Found Konnektor Address in response: {konn} - {request.path}")
 
     return response
 
@@ -121,9 +121,9 @@ def run_antivirus(res: Response):
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
         content_id = att["Content-ID"]
         if scan_res[0] == "OK":
-            app.logger.info(f"scanned ${content_id} : ${scan_res}")
+            app.logger.info(f"scanned {content_id} : {scan_res}")
         else:
-            app.logger.info(f"virus found ${content_id} : ${scan_res}")
+            app.logger.info(f"virus found {content_id} : {scan_res}")
 
             # replace document
             att.set_content(config["config"]["virus_found"])
