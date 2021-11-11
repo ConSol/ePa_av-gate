@@ -1,8 +1,7 @@
 #! /bin/bash
 curl -v \
---proxy http://localhost:8899/soap-api/PHRService/1.3.0 \
---proxy-insecure --insecure \
--X POST http://localhost.conn:8443/soap-api/PHRService/1.3.0 \
+--insecure \
+-X POST http://127.0.0.1:8400/soap-api/PHRService/1.3.0 \
 --header 'Content-Type: application/xml' \
 --data-raw '<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:m0="http://ws.gematik.de/conn/ConnectorContext/v2.0" xmlns:m1="http://ws.gematik.de/conn/ConnectorCommon/v5.0" xmlns:m2="http://ws.gematik.de/fa/phr/v1.1">

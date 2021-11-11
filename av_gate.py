@@ -6,7 +6,8 @@ import re
 
 import clamd
 import requests
-from flask import Flask, Response, request
+import urllib3
+from flask import Flask, Response, request, abort
 
 __version__ = "0.5"
 
@@ -22,26 +23,31 @@ ALL_METHODS = [
     "PATCH",
 ]
 
-config = configparser.ConfigParser()
-config.read("av_gate.ini")
-
-clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
-
 reg_retrieve_document = re.compile(b"RetrieveDocumentSetRequest")
 reg_phr_service_endpoint = re.compile(
     b'^(.*?<.+?:Service Name="PHRService">.*?<.+?:EndpointTLS Location="https://)(.*?)(/.*)$',
     re.DOTALL,
 )
 
+# to prevent flooding log
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 app = Flask(__name__)
-app.logger.setLevel("INFO")
+config = configparser.ConfigParser()
+config.read("av_gate.ini")
+
+loglevel = config["config"].get("log_level", "ERROR")
+app.logger.setLevel(loglevel)
+
+clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
 
 
 @app.route("/connector.sds", methods=["GET"])
 def connector_sds():
-    """resplace the endpoint für PHRService with our address"""
+    """replace the endpoint for PHRService with our address"""
     # <si:Service Name="PHRService">
     # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRService/1.3.0"/>
+
     upstream = request_upstream()
 
     m = reg_phr_service_endpoint.match(upstream.content)
@@ -55,6 +61,7 @@ def connector_sds():
 
 @app.route("/<path:path>", methods=ALL_METHODS)
 def soap(path):
+    """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
 
     if reg_retrieve_document.search(request.get_data()):
@@ -66,36 +73,57 @@ def soap(path):
 
 
 def request_upstream() -> Response:
-    remote_addr = request.remote_addr
+    """Request to real Konnektor"""
+    request_ip = request.headers["X-real-ip"]
+    port = request.host.split(":")[1]
 
-    if not config.has_section(remote_addr):
-        raise KeyError(f"Client {remote_addr} not found in av_gate.ini")
+    client = f"{request_ip}:{port}"
 
-    cfg = config[remote_addr]
+    if config.has_section(client):
+        cfg = config[client]
+    else:
+        fallback = "*:" + port
+        if not config.has_section(fallback):
+            app.logger.error(f"Client {client} not found in av_gate.ini")
+            abort(500)
+        else:
+            cfg = config[fallback]
+
     konn = cfg["Konnektor"]
-    url = f"https://{konn}{request.path}"
+    url = konn + request.path
     data = request.get_data()
+
+    # client cert
     cert = None
-    if cfg.get("proxy_ssl_cert"):
-        cert = (cfg["proxy_ssl_cert"], cfg["proxy_ssl_key"])
-    verify = cert != None
+    if cfg.get("ssl_cert"):
+        cert = (cfg["ssl_cert"], cfg["ssl_key"])
+    verify = cfg.getboolean("ssl_verify")
+
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key not in ("X-Real-Ip", "Host")
+    }
 
     response = requests.request(
         method=request.method,
         url=url,
-        headers=request.headers,
+        headers=headers,
         data=data,
         cert=cert,
         verify=verify,
     )
 
     if bytes(konn, "ASCII") in response.content:
-        app.logger.warning(f"Found Konnektor Address in response: {konn} - {request.path}")
+        app.logger.warning(
+            f"Found Konnektor Address in response: {konn} - {request.path}"
+        )
 
     return response
 
 
 def create_response(data, upstream: Response) -> Response:
+    """Create new response with copying headers from origin response"""
     response = Response(data)
 
     # copy headers from upstream response
@@ -110,6 +138,7 @@ def create_response(data, upstream: Response) -> Response:
 
 
 def run_antivirus(res: Response):
+    """Replace document when virus was found"""
     body = (
         bytes(f"Content-Type: {res.headers['Content-Type']}\r\n\r\n\r\n", "ascii")
         + res.content
@@ -146,4 +175,6 @@ def run_antivirus(res: Response):
 
 
 if __name__ == "__main__":
+    # only relevant, when started directly.
+    # production runs uwsgi
     app.run(host="0.0.0.0", debug=True, port=5001)

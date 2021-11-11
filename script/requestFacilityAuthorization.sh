@@ -19,7 +19,7 @@ curl --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap-ap
         <m1:ClientSystemId>ps_epa_consol_01</m1:ClientSystemId>
         <m1:WorkplaceId>CATS</m1:WorkplaceId>
       </m0:Context>
-      <m1:EhcHandle>X110404542</m1:EhcHandle>
+      <m1:EhcHandle>X110403007</m1:EhcHandle>
       <m:AuthorizationConfiguration>
         <m:Vers_Docs>true</m:Vers_Docs>
         <m:LE_Docs>true</m:LE_Docs>
@@ -27,7 +27,7 @@ curl --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap-ap
         <m:ExpirationDate>2021-12-31</m:ExpirationDate>
       </m:AuthorizationConfiguration>
       <m:RecordIdentifier>
-        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110404542"/>
+        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110403007"/>
         <m2:HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</m2:HomeCommunityId>
       </m:RecordIdentifier>
       <m:OrganizationName>Arztpraxis Martha Oberhausen TEST-ONLY</m:OrganizationName>

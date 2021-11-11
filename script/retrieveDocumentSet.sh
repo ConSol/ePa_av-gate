@@ -2,7 +2,6 @@
 curl -v --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap-api/PHRService/1.3.0' \
 --header 'Content-Type: application/xml' \
 --insecure --cert-type P12 --cert ./cert/ps_epa_consol_01.p12:00 \
---output samples/retrievedocument-resp \
 --data-raw '<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:m0="http://ws.gematik.de/conn/ConnectorContext/v2.0" xmlns:m1="http://ws.gematik.de/conn/ConnectorCommon/v5.0" xmlns:m2="http://ws.gematik.de/fa/phr/v1.1">
   <soap:Header>
@@ -13,7 +12,7 @@ curl -v --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap
         <m1:WorkplaceId>CATS</m1:WorkplaceId>
       </m0:Context>
       <m:RecordIdentifier>
-        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110404542"/>
+        <m2:InsurantId root="1.2.276.0.76.4.8" extension="X110403007"/>
         <m2:HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</m2:HomeCommunityId>
       </m:RecordIdentifier>
     </m:ContextHeader>
@@ -29,19 +28,20 @@ curl -v --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap
       <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
         <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</HomeCommunityId>
         <RepositoryUniqueId>1.2.276.0.76.3.1.91.1</RepositoryUniqueId>
-        <DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>
+        <DocumentUniqueId>2.25.159146971858510204770</DocumentUniqueId>
       </DocumentRequest>
       <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
         <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</HomeCommunityId>
         <RepositoryUniqueId>1.2.276.0.76.3.1.91.1</RepositoryUniqueId>
-        <DocumentUniqueId>2.25.83711722020886177921</DocumentUniqueId>
+        <DocumentUniqueId>2.25.234564263447938062697</DocumentUniqueId>
       </DocumentRequest>
       <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
         <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</HomeCommunityId>
         <RepositoryUniqueId>1.2.276.0.76.3.1.91.1</RepositoryUniqueId>
-        <DocumentUniqueId>2.25.102925591037611682627</DocumentUniqueId>
+        <DocumentUniqueId>2.25.267792980016692345363</DocumentUniqueId>
       </DocumentRequest>
     </RetrieveDocumentSetRequest>
   </soap:Body>
 </soap:Envelope>
-'
+' \
+#--output - | less

@@ -1,89 +1,166 @@
-import av_gate
-import requests
-from unittest import mock
+import io
+import re
+import xml.etree.ElementTree as ET
+from unittest.mock import Mock
 
-def test_connector_sds(monkeypatch):
+import av_gate
+import pytest
+import requests
+
+
+av_gate.config.read_dict(
+    {
+        "config": {"virus_found": "_VIRUS_MARKER_"},
+        "*:400": {"konnektor": "some"},
+        "8.8.8.8:401": {"konnektor": "some"},
+    }
+)
+
+
+@pytest.fixture
+def client(monkeypatch):
+    av_gate.config.update({"*:400": {"Konnektor": "https://nowhere.com"}})
+    with av_gate.app.test_client() as client:
+        with av_gate.app.app_context():
+
+            # Mock Requests
+            class MockResponse:
+                headers = {"Test-Header": "bla"}
+                content = b"""bla bla"""
+
+                def __init__(self, **kwargs):
+                    self.__dict__.update(kwargs)
+
+            def mock_request(url: str, data: str, *args, **kwargs):
+
+                if url.endswith("connector.sds"):
+                    return MockResponse(
+                        content=open("samples/connector.sds", "rb").read()
+                    )
+
+                if b"GET_EICAR" in data:
+                    return MockResponse(
+                        headers={
+                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
+                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
+                            'start="<root.message@cxf.apache.org>"; '
+                            'start-info="application/soap+xml";charset=UTF-8'
+                        },
+                        content=open(
+                            "samples/retrievedocument-resp_eicar", "rb"
+                        ).read(),
+                    )
+
+                if b"RetrieveDocumentSet" in data:
+                    return MockResponse(
+                        headers={
+                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
+                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
+                            'start="<root.message@cxf.apache.org>"; '
+                            'start-info="application/soap+xml";charset=UTF-8'
+                        },
+                        content=open("samples/retrievedocument-resp", "rb").read(),
+                    )
+
+                return MockResponse()
+
+            monkeypatch.setattr(requests, "request", mock_request)
+
+            yield client
+
+
+@pytest.fixture
+def clamav(monkeypatch):
+    with av_gate.app.app_context():
+        # Mock clamd
+        def mock_clamav(stream: io.BytesIO):
+            if b"EICAR" in stream.read():
+                return {"stream": ("FOUND", "Win.Test.EICAR_HDB-1")}
+            else:
+                return {"stream": ("OK", None)}
+
+        monkeypatch.setattr(av_gate.clamav, "instream", Mock(side_effect=mock_clamav))
+
+        yield av_gate.clamav.instream
+
+
+@pytest.mark.parametrize(
+    "real_ip,host,expected",
+    [
+        ("2.2.2.2", "7.7.7.7:400", 200),
+        ("8.8.8.8", "7.7.7.7:400", 200),
+        ("8.8.8.8", "7.7.7.7:401", 200),
+        ("8.8.8.8", "7.7.7.7:402", 500),
+    ],
+)
+def test_routing_ip(client, real_ip, host, expected):
+    "check config pick by ip and port"
+
+    res = client.get(
+        "/any",
+        headers={"X-real-ip": real_ip, "Host": host},
+    )
+
+    assert res.status_code == expected
+
+
+def test_connector_sds(client):
     "check endpoint is replaced"
 
-    class MockResponse:
-        headers = { "Test-Header": "bla" }
-        content = b"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<sd:ConnectorServices xmlns:pi="http://ws.gematik.de/int/version/ProductInformation/v1.1" xmlns:sd="http://ws.gematik.de/conn/ServiceDirectory/v3.1" xmlns:si="http://ws.gematik.de/conn/ServiceInformation/v2.0">
-    <pi:ProductInformation>
-        <pi:InformationDate>2021-10-07T13:41:01.421Z</pi:InformationDate>
-        <pi:ProductTypeInformation>
-            <pi:ProductType>Konnektor</pi:ProductType>
-            <pi:ProductTypeVersion>4.4.0</pi:ProductTypeVersion>
-        </pi:ProductTypeInformation>
-        <pi:ProductIdentification>
-            <pi:ProductVendorID>GMTK</pi:ProductVendorID>
-            <pi:ProductCode>AKTORFM</pi:ProductCode>
-            <pi:ProductVersion>
-                <pi:Local>
-                    <pi:HWVersion>1.27.0</pi:HWVersion>
-                    <pi:FWVersion>1.27.0</pi:FWVersion>
-                </pi:Local>
-            </pi:ProductVersion>
-        </pi:ProductIdentification>
-        <pi:ProductMiscellaneous>
-            <pi:ProductVendorName>Gematik</pi:ProductVendorName>
-            <pi:ProductName>Aktor-FM</pi:ProductName>
-        </pi:ProductMiscellaneous>
-    </pi:ProductInformation>
-    <sd:TLSMandatory>true</sd:TLSMandatory>
-    <sd:ClientAutMandatory>true</sd:ClientAutMandatory>
-    <si:ServiceInformation>
-        <si:Service Name="CardTerminalService">
-            <si:Abstract>CardTerminalService</si:Abstract>
-            <si:Versions>
-                <si:Version TargetNamespace="http://ws.gematik.de/conn/CardTerminalService/WSDL/v1.1" Version="1.1.0">
-                    <si:Abstract>CardTerminalService</si:Abstract>
-                    <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/CardTerminalService/1.1.0"/>
-                </si:Version>
-            </si:Versions>
-        </si:Service>
-        <si:Service Name="EventService">
-            <si:Abstract>EventService</si:Abstract>
-            <si:Versions>
-                <si:Version TargetNamespace="http://ws.gematik.de/conn/EventService/v7.2" Version="7.2.0">
-                    <si:Abstract>EventService</si:Abstract>
-                    <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/EventService/7.2.0"/>
-                </si:Version>
-            </si:Versions>
-        </si:Service>
-        <si:Service Name="PHRManagementService">
-            <si:Abstract>PHRManagementService</si:Abstract>
-            <si:Versions>
-                <si:Version TargetNamespace="http://ws.gematik.de/conn/phrs/PHRManagementService/WSDL/v1.3" Version="1.3.0">
-                    <si:Abstract>PHRManagementService</si:Abstract>
-                    <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0"/>
-                </si:Version>
-            </si:Versions>
-        </si:Service>
-        <si:Service Name="PHRService">
-            <si:Abstract>PHRService</si:Abstract>
-            <si:Versions>
-                <si:Version TargetNamespace="http://ws.gematik.de/conn/phrs/PHRService/WSDL/v1.3" Version="1.3.0">
-                    <si:Abstract>PHRService</si:Abstract>
-                    <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRService/1.3.0"/>
-                </si:Version>
-            </si:Versions>
-        </si:Service>
-    </si:ServiceInformation>
-</sd:ConnectorServices>"""
+    res = client.get(
+        "/connector.sds",
+        headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
+    )
+    xml = ET.fromstring(res.data)
 
-    def mock_request(*args, **kwargs):
-        return MockResponse()
-
-    monkeypatch.setattr(requests, "request", mock_request)
+    data = {
+        e.attrib["Name"]: e.find("**/{*}EndpointTLS").attrib["Location"]
+        for e in xml.findall("{*}ServiceInformation/{*}Service")
+    }
+    assert (
+        data["PHRManagementService"]
+        == "https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0"
+    )
+    assert data["PHRService"] == "https://7.7.7.7:400/soap-api/PHRService/1.3.0"
 
 
-    with av_gate.app.test_request_context("/connector.sds"):
-        with av_gate.app.test_client() as client:
+def test_clam_av(client, clamav):
+    "check clam_av is called"
 
-            res = client.get("/connector.sds")
-            data = res.data[:]
+    res = client.post(
+        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
+        data=open("./test/retrieveDocumentSet_req.xml", "rb").read(),
+    )
 
-            assert b"https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0" in data
-            assert b"https://localhost/soap-api/PHRService/1.3.0" in data
+    parts = re.split(b"\r?\n--.*?\r?\n\r?\n", res.data, flags=re.DOTALL)
+    xml = ET.fromstring(parts[1])
 
+    assert len(parts) == 5  # n+1
+    assert clamav.has_been_called()
+
+
+def test_virus_removed(client, clamav):
+    "check virus is removed"
+
+    data = (
+        open("./test/retrieveDocumentSet_req.xml", "rb")
+        .read()
+        .replace(
+            b"<DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>",
+            b"<DocumentUniqueId>GET_EICAR</DocumentUniqueId>",
+        )
+    )
+
+    res = client.post(
+        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
+        data=data,
+    )
+
+    parts = re.split(b"\r?\n--.*?\r?\n\r?\n", res.data, flags=re.DOTALL)
+    xml = ET.fromstring(parts[1])
+
+    assert len(parts) == 5  # n+1
+    assert b"_VIRUS_MARKER_" in parts[3]
+    assert clamav.has_been_called()
