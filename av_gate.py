@@ -3,11 +3,15 @@ import email.parser
 import email.policy
 import io
 import re
+import xml.etree.ElementTree as ET
+from copy import copy, deepcopy
+from email.message import EmailMessage
+from urllib.parse import urlparse
 
 import clamd
 import requests
 import urllib3
-from flask import Flask, Response, request, abort
+from flask import Flask, Response, abort, request
 
 __version__ = "0.5"
 
@@ -23,11 +27,7 @@ ALL_METHODS = [
     "PATCH",
 ]
 
-reg_retrieve_document = re.compile(b"RetrieveDocumentSetRequest")
-reg_phr_service_endpoint = re.compile(
-    b'^(.*?<.+?:Service Name="PHRService">.*?<.+?:EndpointTLS Location="https://)(.*?)(/.*)$',
-    re.DOTALL,
-)
+reg_retrieve_document = re.compile(b":RetrieveDocumentSetRequest</Action>")
 
 # to prevent flooding log
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -50,13 +50,15 @@ def connector_sds():
 
     upstream = request_upstream()
 
-    m = reg_phr_service_endpoint.match(upstream.content)
-    if not m:
+    xml = ET.fromstring(upstream.content)
+    e = xml.find("{*}ServiceInformation/{*}Service[@Name='PHRService']//{*}EndpointTLS")
+    if not e:
         KeyError("connector.sds does not contain PHRService location.")
 
-    data = m.group(1) + bytes(request.host, "ASCII") + m.group(3)
+    previous_url = urlparse(e.attrib["Location"])
+    e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
 
-    return create_response(data, upstream)
+    return create_response(ET.tostring(xml), upstream)
 
 
 @app.route("/<path:path>", methods=ALL_METHODS)
@@ -64,7 +66,10 @@ def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
 
-    if reg_retrieve_document.search(request.get_data()):
+    xml = ET.fromstring(request.get_data())
+    e = xml.find("{*}Header/{*}Action")
+
+    if e != None and "RetrieveDocumentSet" in e.text:
         data = run_antivirus(upstream) or upstream.content
     else:
         data = upstream.content
@@ -138,13 +143,13 @@ def create_response(data, upstream: Response) -> Response:
 
 
 def run_antivirus(res: Response):
-    """Replace document when virus was found"""
+    """Remove document when virus was found"""
     body = (
         bytes(f"Content-Type: {res.headers['Content-Type']}\r\n\r\n\r\n", "ascii")
         + res.content
     )
     msg = email.parser.BytesParser(policy=email.policy.default).parsebytes(body)
-    virus_found = 0
+    virus_atts = []
 
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
@@ -153,19 +158,62 @@ def run_antivirus(res: Response):
             app.logger.info(f"scanned {content_id} : {scan_res}")
         else:
             app.logger.info(f"virus found {content_id} : {scan_res}")
+            virus_atts.append(content_id)
 
-            # replace document
-            att.set_content(config["config"]["virus_found"])
+    if virus_atts:
+        soap_part: EmailMessage = next(msg.iter_parts())
+        xml = ET.fromstring(soap_part.get_content())
+        xml_resp = xml.find(
+            "{*}Body/{*}RetrieveDocumentSetResponse/{*}RegistryResponse"
+        )
+        xml_ns = re.search("{.*}", xml_resp.tag)[0]
+        xml_errlist = ET.Element(f"{xml_ns}RegistryErrorList")
+        xml_resp.append(xml_errlist)
 
-            # fix headers
-            del att["MIME-Version"]
-            del att["Content-Transfer-Encoding"]
-            att["Content-Transfer-Encoding"] = "binary"
-            att["Content-ID"] = content_id
+        attachments = list(msg.iter_attachments())
+        msg.set_payload([soap_part])
+        for att in attachments:
+            content_id = att["Content-ID"]
+            if content_id in virus_atts:
+                err_text = (
+                    f"Document was detected as malware for uniqueId '{content_id}'."
+                )
+                xml_errlist.append(
+                    ET.Element(
+                        f"{xml_ns}RegistryError",
+                        attrib={
+                            "codeContext": err_text,
+                            "errorCode": "XDSDocumentUniqueIdError",  # from RetrieveDocumentSetResponse
+                            # "errorCode": "XDSMissingDocument", # from AdHocQueryResponse
+                            "severity": "urn:oasis:names:tc:ebxml-regrep:ErrorSeverityType:Error",
+                        },
+                        text=err_text,
+                    )
+                )
+            else:
+                msg.attach(att)
 
-            virus_found += 1
+        if len(msg.get_payload()) > 1:
+            xml_resp.attrib[
+                "status"
+            ] = "urn:ihe:iti:2007:ResponseStatusType:PartialSuccess"
+        else:
+            xml_resp.attrib[
+                "status"
+            ] = "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure"
+            xml_errlist.append(
+                ET.Element(
+                    f"{xml_ns}RegistryError",
+                    attrib={
+                        "severity": "urn:oasis:names:tc:ebxml-regrep:ErrorSeverityType:Error",
+                        "errorCode": "XDSRegistryMetadataError",
+                        "codeContext": "No documents found for unique ids in request",
+                    },
+                    text="No documents found for unique ids in request",
+                )
+            )
 
-    if virus_found:
+        soap_part.set_payload(ET.tostring(xml), soap_part.get_content_maintype())
         body = msg.as_bytes()
 
         # remove headers of envelope
