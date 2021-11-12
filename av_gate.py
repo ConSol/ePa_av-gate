@@ -13,7 +13,7 @@ import requests
 import urllib3
 from flask import Flask, Response, abort, request
 
-__version__ = "0.5"
+__version__ = "0.6"
 
 ALL_METHODS = [
     "GET",
