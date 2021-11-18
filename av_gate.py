@@ -4,9 +4,8 @@ import email.policy
 import io
 import re
 import xml.etree.ElementTree as ET
-from copy import copy, deepcopy
 from email.message import EmailMessage
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 import clamd
 import requests
@@ -65,14 +64,8 @@ def connector_sds():
 def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
-
-    xml = ET.fromstring(request.get_data())
-    e = xml.find("{*}Header/{*}Action")
-
-    if e != None and "RetrieveDocumentSet" in e.text:
-        data = run_antivirus(upstream) or upstream.content
-    else:
-        data = upstream.content
+    
+    data = run_antivirus(upstream) or upstream.content
 
     return create_response(data, upstream)
 
@@ -80,7 +73,8 @@ def soap(path):
 def request_upstream(warn=True) -> Response:
     """Request to real Konnektor"""
     request_ip = request.headers["X-real-ip"]
-    port = request.host.split(":")[1]
+    app.logger.info(f"header host {request.host}")
+    port = request.host.split(":")[1] if ":" in request.host else "443"
 
     client = f"{request_ip}:{port}"
 
@@ -126,7 +120,7 @@ def request_upstream(warn=True) -> Response:
             )
 
         return response
-        
+
     except Exception as err:
         app.logger.error(err)
         abort(502)
@@ -149,39 +143,57 @@ def create_response(data, upstream: Response) -> Response:
 
 def run_antivirus(res: Response):
     """Remove document when virus was found"""
+    
+    # only interested in multipart
+    if not res.headers["Content-Type"].startswith("multipart"):
+        return
+        
+    # add Header for content-type
     body = (
         bytes(f"Content-Type: {res.headers['Content-Type']}\r\n\r\n\r\n", "ascii")
         + res.content
     )
     msg = email.parser.BytesParser(policy=email.policy.default).parsebytes(body)
+    soap_part: EmailMessage = next(msg.iter_parts())
+    xml = ET.fromstring(soap_part.get_content())
+    response_xml = xml.find("{*}Body/{*}RetrieveDocumentSetResponse")
+    
+    # only interested in RetrieveDocumentSet
+    if response_xml is None:
+        return
+    
     virus_atts = []
 
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
         content_id = att["Content-ID"]
-        if scan_res[0] == "OK":
-            app.logger.info(f"scanned {content_id} : {scan_res}")
-        else:
+        if scan_res[0] != "OK":
             app.logger.info(f"virus found {content_id} : {scan_res}")
             virus_atts.append(content_id)
 
     if virus_atts:
-        soap_part: EmailMessage = next(msg.iter_parts())
-        xml = ET.fromstring(soap_part.get_content())
-        xml_resp = xml.find(
-            "{*}Body/{*}RetrieveDocumentSetResponse/{*}RegistryResponse"
-        )
+        xml_resp = response_xml.find("{*}RegistryResponse")
         xml_ns = re.search("{.*}", xml_resp.tag)[0]
         xml_errlist = ET.Element(f"{xml_ns}RegistryErrorList")
         xml_resp.append(xml_errlist)
+
+        xml_documents = {
+            unquote(d.find("{*}Document/{*}Include").attrib["href"])[4:]: d
+            for d in response_xml.findall("{*}DocumentResponse")
+        }
 
         attachments = list(msg.iter_attachments())
         msg.set_payload([soap_part])
         for att in attachments:
             content_id = att["Content-ID"]
             if content_id in virus_atts:
+                document_xml = xml_documents[content_id[1:-1]]
+                document_id = document_xml.find("{*}DocumentUniqueId").text
+                app.logger.info(f"removed document {document_id}")
+
+                # add error msg
                 err_text = (
-                    f"Document was detected as malware for uniqueId '{content_id}'."
+                    f"Document was detected as malware for uniqueId '{document_id}'."
                 )
                 xml_errlist.append(
                     ET.Element(
@@ -195,6 +207,10 @@ def run_antivirus(res: Response):
                         text=err_text,
                     )
                 )
+
+                # remove document reference
+                response_xml.remove(document_xml)
+
             else:
                 msg.attach(att)
 

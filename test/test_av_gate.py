@@ -50,7 +50,7 @@ def client(monkeypatch):
                             "samples/retrievedocument-resp_eicar", "rb"
                         ).read(),
                     )
-                    
+
                 if b"ALL_EICAR" in data:
                     return MockResponse(
                         headers={
@@ -62,7 +62,7 @@ def client(monkeypatch):
                         content=open(
                             "samples/retrievedocument-resp_all_eicar", "rb"
                         ).read(),
-                    )                    
+                    )
 
                 if b"RetrieveDocumentSet" in data:
                     return MockResponse(
@@ -146,10 +146,12 @@ def test_clam_av(client, clamav):
         data=open("./test/retrieveDocumentSet_req.xml", "rb").read(),
     )
 
-    parts = re.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL)
-    xml = ET.fromstring(parts[1].split(b"\n\n"))
+    parts = re.split(
+        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
+    )
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
-    assert len(parts) == 5  # n+1
+    assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
 
 
@@ -171,14 +173,22 @@ def test_virus_removed(client, clamav):
         data=data,
     )
 
-    parts = re.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL)
-    xml = ET.fromstring(parts[1].split(b"\n\n"))
+    parts = re.split(
+        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
+    )
+    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
 
-    assert len(parts) == 4  # n+1
+    assert len(parts) == 5  # n+2
     assert clamav.has_been_called()
-    rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")  
-    assert rres and rres.attrib["status"] == "urn:ihe:iti:2007:ResponseStatusType:PartialSuccess"
-    assert "detected as malware" in rres.find("*/{*}RegistryError").attrib["codeContext"] 
+    rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
+    assert (
+        rres
+        and rres.attrib["status"]
+        == "urn:ihe:iti:2007:ResponseStatusType:PartialSuccess"
+    )
+    assert (
+        "detected as malware" in rres.find("*/{*}RegistryError").attrib["codeContext"]
+    )
 
 
 def test_all_is_virusd(client, clamav):
@@ -199,10 +209,47 @@ def test_all_is_virusd(client, clamav):
         data=data,
     )
 
-    parts = re.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL)
+    parts = re.split(
+        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
+    )
     xml = ET.fromstring(parts[1].split(b"\n\n")[1])
 
-    assert len(parts) == 3 # n +2
-    rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")  
-    assert rres and rres.attrib["status"] == "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure"
-    assert rres and rres.find("*/{*}RegistryError[@errorCode='XDSRegistryMetadataError']") is not None
+    assert len(parts) == 3  # n+2
+    rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
+    assert (
+        rres is not None
+        and rres.attrib["status"]
+        == "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure"
+    )
+    assert (
+        rres
+        and rres.find("*/{*}RegistryError[@errorCode='XDSRegistryMetadataError']")
+        is not None
+    )
+
+
+def test_handle_multipart_request(client, clamav):
+    "check handling of requests with multipart"
+
+    data = (
+        b"""Content-Type: multipart/related; type="application/xop+xml"; boundary="uuid:999"; start="<root.message@cxf.apache.org>"; start-info="application/soap+xml";charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+
+
+--uuid:999
+Content-Type: application/xop+xml; charset=UTF-8; type="application/soap+xml"
+Content-Transfer-Encoding: binary
+Content-ID: <root.message@cxf.apache.org>
+
+""".replace(b"\n", b"\r\n")
+        + open("./test/retrieveDocumentSet_req.xml", "rb").read()
+    )
+
+    res = client.post(
+        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
+        data=data,
+    )
+
+    assert res.status_code == 200
