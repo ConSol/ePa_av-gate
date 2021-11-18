@@ -48,7 +48,7 @@ def connector_sds():
     # <si:Service Name="PHRService">
     # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRService/1.3.0"/>
 
-    upstream = request_upstream()
+    upstream = request_upstream(warn=False)
 
     xml = ET.fromstring(upstream.content)
     e = xml.find("{*}ServiceInformation/{*}Service[@Name='PHRService']//{*}EndpointTLS")
@@ -77,7 +77,7 @@ def soap(path):
     return create_response(data, upstream)
 
 
-def request_upstream() -> Response:
+def request_upstream(warn=True) -> Response:
     """Request to real Konnektor"""
     request_ip = request.headers["X-real-ip"]
     port = request.host.split(":")[1]
@@ -110,21 +110,26 @@ def request_upstream() -> Response:
         if key not in ("X-Real-Ip", "Host")
     }
 
-    response = requests.request(
-        method=request.method,
-        url=url,
-        headers=headers,
-        data=data,
-        cert=cert,
-        verify=verify,
-    )
-
-    if bytes(konn, "ASCII") in response.content:
-        app.logger.warning(
-            f"Found Konnektor Address in response: {konn} - {request.path}"
+    try:
+        response = requests.request(
+            method=request.method,
+            url=url,
+            headers=headers,
+            data=data,
+            cert=cert,
+            verify=verify,
         )
 
-    return response
+        if warn and bytes(konn, "ASCII") in response.content:
+            app.logger.warning(
+                f"Found Konnektor Address in response: {konn} - {request.path}"
+            )
+
+        return response
+        
+    except Exception as err:
+        app.logger.error(err)
+        abort(502)
 
 
 def create_response(data, upstream: Response) -> Response:
