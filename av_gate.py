@@ -146,7 +146,7 @@ def run_antivirus(res: Response):
     
     app.logger.info(f"HEADER {res.headers}")
     # only interested in multipart
-    if not res.headers["Content-Type"].startswith("multipart"):
+    if not res.headers["Content-Type"].lower().startswith("multipart"):
         return
         
     # add Header for content-type
