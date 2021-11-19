@@ -144,6 +144,7 @@ def create_response(data, upstream: Response) -> Response:
 def run_antivirus(res: Response):
     """Remove document when virus was found"""
     
+    app.logger.info(f"HEADER {res.headers}")
     # only interested in multipart
     if not res.headers["Content-Type"].startswith("multipart"):
         return
@@ -160,6 +161,7 @@ def run_antivirus(res: Response):
     
     # only interested in RetrieveDocumentSet
     if response_xml is None:
+        app.logger.info(f"XML NOT FOUND RetrieveDocument {soap_part.get_content()[:200]}")
         return
     
     virus_atts = []
@@ -170,6 +172,8 @@ def run_antivirus(res: Response):
         if scan_res[0] != "OK":
             app.logger.info(f"virus found {content_id} : {scan_res}")
             virus_atts.append(content_id)
+        else:
+            app.logger.info(f"scanned document {content_id} : {scan_res}")
 
     if virus_atts:
         xml_resp = response_xml.find("{*}RegistryResponse")
