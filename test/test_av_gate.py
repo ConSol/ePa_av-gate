@@ -10,7 +10,7 @@ import requests
 
 av_gate.config.read_dict(
     {
-        "config": {"virus_found": "_VIRUS_MARKER_"},
+        "config": {"remove_malicious": True},
         "*:400": {"konnektor": "some"},
         "8.8.8.8:401": {"konnektor": "some"},
     }
@@ -192,7 +192,7 @@ def test_virus_removed(client, clamav):
 
 
 def test_all_is_virusd(client, clamav):
-    "check different error message if all msg are malitious"
+    "check different error message if all msg are malicious"
 
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")

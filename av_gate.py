@@ -3,11 +3,12 @@ import email.parser
 import email.policy
 import io
 import re
-import xml.etree.ElementTree as ET
 from email.message import EmailMessage
-from urllib.parse import urlparse, unquote
+from typing import List
+from urllib.parse import unquote, urlparse
 
 import clamd
+import lxml.etree as ET
 import requests
 import urllib3
 from flask import Flask, Response, abort, request
@@ -40,6 +41,9 @@ app.logger.setLevel(loglevel)
 
 clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
 
+# temporary
+VIRUS_FOUND_PDF = open("virus_found.pdf", mode="rb").read()
+
 
 @app.route("/connector.sds", methods=["GET"])
 def connector_sds():
@@ -51,7 +55,7 @@ def connector_sds():
 
     xml = ET.fromstring(upstream.content)
     e = xml.find("{*}ServiceInformation/{*}Service[@Name='PHRService']//{*}EndpointTLS")
-    if not e:
+    if e is None:
         KeyError("connector.sds does not contain PHRService location.")
 
     previous_url = urlparse(e.attrib["Location"])
@@ -64,9 +68,8 @@ def connector_sds():
 def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
-    
+    app.logger.debug(f"client: {upstream.content[:500]}")
     data = run_antivirus(upstream) or upstream.content
-
     return create_response(data, upstream)
 
 
@@ -91,6 +94,7 @@ def request_upstream(warn=True) -> Response:
     konn = cfg["Konnektor"]
     url = konn + request.path
     data = request.get_data()
+    app.logger.debug(f"connector: {data[:500]}")
 
     # client cert
     cert = None
@@ -138,17 +142,18 @@ def create_response(data, upstream: Response) -> Response:
     # overwrite content-length with current length
     response.headers["Content-Length"] = str(response.content_length)
 
+    app.logger.debug(f"response: {response.get_data()[:500]}")
     return response
 
 
 def run_antivirus(res: Response):
     """Remove document when virus was found"""
-    
+
     app.logger.info(f"HEADER {res.headers}")
     # only interested in multipart
     if not res.headers["Content-Type"].lower().startswith("multipart"):
         return
-        
+
     # add Header for content-type
     body = (
         bytes(f"Content-Type: {res.headers['Content-Type']}\r\n\r\n\r\n", "ascii")
@@ -158,13 +163,16 @@ def run_antivirus(res: Response):
     soap_part: EmailMessage = next(msg.iter_parts())
     xml = ET.fromstring(soap_part.get_content())
     response_xml = xml.find("{*}Body/{*}RetrieveDocumentSetResponse")
-    
+
     # only interested in RetrieveDocumentSet
     if response_xml is None:
-        app.logger.info(f"XML NOT FOUND RetrieveDocument {soap_part.get_content()[:200]}")
+        app.logger.info(
+            f"XML NOT FOUND RetrieveDocument {soap_part.get_content()[:200]}"
+        )
         return
-    
+
     virus_atts = []
+    REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
 
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
@@ -179,72 +187,81 @@ def run_antivirus(res: Response):
         xml_resp = response_xml.find("{*}RegistryResponse")
         xml_ns = re.search("{.*}", xml_resp.tag)[0]
         xml_errlist = ET.Element(f"{xml_ns}RegistryErrorList")
-        xml_resp.append(xml_errlist)
+        if REMOVE_MALICIOUS:
+            xml_resp.append(xml_errlist)
 
         xml_documents = {
             unquote(d.find("{*}Document/{*}Include").attrib["href"])[4:]: d
             for d in response_xml.findall("{*}DocumentResponse")
         }
 
-        attachments = list(msg.iter_attachments())
+        attachments: List[EmailMessage] = list(msg.iter_attachments())
         msg.set_payload([soap_part])
         for att in attachments:
             content_id = att["Content-ID"]
             if content_id in virus_atts:
                 document_xml = xml_documents[content_id[1:-1]]
-                document_id = document_xml.find("{*}DocumentUniqueId").text
-                app.logger.info(f"removed document {document_id}")
+                if REMOVE_MALICIOUS:
+                    add_error_msg(document_xml, xml_errlist, xml_ns)
+                    # remove document reference
+                    response_xml.remove(document_xml)
 
-                # add error msg
-                err_text = (
-                    f"Document was detected as malware for uniqueId '{document_id}'."
-                )
-                xml_errlist.append(
-                    ET.Element(
-                        f"{xml_ns}RegistryError",
-                        attrib={
-                            "codeContext": err_text,
-                            "errorCode": "XDSDocumentUniqueIdError",  # from RetrieveDocumentSetResponse
-                            # "errorCode": "XDSMissingDocument", # from AdHocQueryResponse
-                            "severity": "urn:oasis:names:tc:ebxml-regrep:ErrorSeverityType:Error",
-                        },
-                        text=err_text,
-                    )
-                )
-
-                # remove document reference
-                response_xml.remove(document_xml)
-
+                else:  # replace document
+                    att.set_payload(VIRUS_FOUND_PDF)
+                    msg.attach(att)
             else:
                 msg.attach(att)
 
-        if len(msg.get_payload()) > 1:
-            xml_resp.attrib[
-                "status"
-            ] = "urn:ihe:iti:2007:ResponseStatusType:PartialSuccess"
-        else:
-            xml_resp.attrib[
-                "status"
-            ] = "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure"
-            xml_errlist.append(
-                ET.Element(
-                    f"{xml_ns}RegistryError",
-                    attrib={
-                        "severity": "urn:oasis:names:tc:ebxml-regrep:ErrorSeverityType:Error",
-                        "errorCode": "XDSRegistryMetadataError",
-                        "codeContext": "No documents found for unique ids in request",
-                    },
-                    text="No documents found for unique ids in request",
-                )
-            )
+        if REMOVE_MALICIOUS:
+            fix_status(xml_resp, xml_errlist, xml_ns, msg)
 
-        soap_part.set_payload(ET.tostring(xml), soap_part.get_content_maintype())
-        body = msg.as_bytes()
+    REWRITE_SOAP = config["config"].getboolean("rewrite_soap", False)
 
-        # remove headers of envelope
-        body = body[body.find(b"\n\n") + 2 :]
+    if virus_atts or REWRITE_SOAP:
+        orig_header = res.content[: res.content.find(b"<soap:Envelope")]
+        soap_part.set_payload(ET.tostring(xml), charset="utf-8")
+        payload = msg.as_bytes()
+        body = orig_header + payload[payload.find(b"<soap:Envelope") :]
 
         return body
+
+
+def add_error_msg(document_xml, xml_errlist, xml_ns):
+    document_id = document_xml.find("{*}DocumentUniqueId").text
+    app.logger.info(f"removed document {document_id}")
+    err_text = f"Document was detected as malware for uniqueId '{document_id}'."
+    xml_errlist.append(
+        ET.Element(
+            f"{xml_ns}RegistryError",
+            attrib={
+                "codeContext": err_text,
+                "errorCode": "XDSDocumentUniqueIdError",  # from RetrieveDocumentSetResponse
+                # "errorCode": "XDSMissingDocument", # from AdHocQueryResponse
+                "severity": "urn:oasis:names:tc:ebxml-regrep:ErrorSeverityType:Error",
+            },
+            text=err_text,
+        )
+    )
+
+
+def fix_status(xml_resp, xml_errlist, xml_ns, msg):
+    if len(msg.get_payload()) > 1:
+        xml_resp.attrib["status"] = "urn:ihe:iti:2007:ResponseStatusType:PartialSuccess"
+    else:
+        xml_resp.attrib[
+            "status"
+        ] = "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure"
+        xml_errlist.append(
+            ET.Element(
+                f"{xml_ns}RegistryError",
+                attrib={
+                    "severity": "urn:oasis:names:tc:ebxml-regrep:ErrorSeverityType:Error",
+                    "errorCode": "XDSRegistryMetadataError",
+                    "codeContext": "No documents found for unique ids in request",
+                },
+                text="No documents found for unique ids in request",
+            )
+        )
 
 
 if __name__ == "__main__":
