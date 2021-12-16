@@ -176,7 +176,7 @@ def run_antivirus(res: Response):
 
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
-        content_id = att["Content-ID"]
+        content_id = att["Content-ID"][1:-1]
         if scan_res[0] != "OK":
             app.logger.info(f"virus found {content_id} : {scan_res}")
             virus_atts.append(content_id)
@@ -198,18 +198,21 @@ def run_antivirus(res: Response):
         attachments: List[EmailMessage] = list(msg.iter_attachments())
         msg.set_payload([soap_part])
         for att in attachments:
-            content_id = att["Content-ID"]
+            content_id = att["Content-ID"][1:-1]
             if content_id in virus_atts:
-                document_xml = xml_documents[content_id[1:-1]]
+                document_xml = xml_documents[content_id]
                 if REMOVE_MALICIOUS:
                     add_error_msg(document_xml, xml_errlist, xml_ns)
                     # remove document reference
                     response_xml.remove(document_xml)
+                    app.logger.info(f"document removed {content_id}")
 
                 else:  # replace document
+                    app.logger.info(f"document replaced {content_id}")
                     att.set_payload(VIRUS_FOUND_PDF)
                     msg.attach(att)
             else:
+                app.logger.debug(f"document untouched {content_id}")
                 msg.attach(att)
 
         if REMOVE_MALICIOUS:
