@@ -34,10 +34,14 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 config = configparser.ConfigParser()
+
 config.read("av_gate.ini")
 
 loglevel = config["config"].get("log_level", "ERROR")
 app.logger.setLevel(loglevel)
+app.logger.info(f"av_gate {__version__}")
+app.logger.info(f"set loglevel to {loglevel}")
+app.logger.info(list(config["config"].items()))
 
 clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
 
@@ -176,7 +180,8 @@ def run_antivirus(res: Response):
 
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
-        content_id = att["Content-ID"][1:-1]
+        content_id = att["Content-ID"]
+        content_id = content_id[1:content_id.index("@")]
         if scan_res[0] != "OK":
             app.logger.info(f"virus found {content_id} : {scan_res}")
             virus_atts.append(content_id)
@@ -190,15 +195,20 @@ def run_antivirus(res: Response):
         if REMOVE_MALICIOUS:
             xml_resp.append(xml_errlist)
 
-        xml_documents = {
-            unquote(d.find("{*}Document/{*}Include").attrib["href"])[4:]: d
-            for d in response_xml.findall("{*}DocumentResponse")
-        }
+        xml_documents = {}
+
+        for doc in response_xml.findall("{*}DocumentResponse"):
+            content_id = doc.find("{*}Document/{*}Include").attrib["href"]
+            content_id = content_id[4:content_id.index("@")]
+            xml_documents[content_id] = doc
+
+        app.logger.debug(f"content_ids: {list(xml_documents.keys())}")
 
         attachments: List[EmailMessage] = list(msg.iter_attachments())
         msg.set_payload([soap_part])
         for att in attachments:
-            content_id = att["Content-ID"][1:-1]
+            content_id = att["Content-ID"]
+            content_id = content_id[1:content_id.index("@")]
             if content_id in virus_atts:
                 document_xml = xml_documents[content_id]
                 if REMOVE_MALICIOUS:
