@@ -5,7 +5,7 @@ import io
 import re
 from email.message import EmailMessage
 from typing import List
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 import logging
 
 import clamd
@@ -240,6 +240,8 @@ def run_antivirus(res: Response):
 
 def extract_id(id: str) -> str:
     logging.debug(f"content_id: {id}")
+
+    id = unquote(id)
 
     if id.startswith("cid:"):
         id = id[4:]
