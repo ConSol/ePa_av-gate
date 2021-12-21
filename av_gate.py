@@ -5,7 +5,8 @@ import io
 import re
 from email.message import EmailMessage
 from typing import List
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+import logging
 
 import clamd
 import lxml.etree as ET
@@ -38,16 +39,17 @@ config = configparser.ConfigParser()
 config.read("av_gate.ini")
 
 loglevel = config["config"].get("log_level", "ERROR")
-app.logger.setLevel(loglevel)
-app.logger.info(f"av_gate {__version__}")
-app.logger.info(f"set loglevel to {loglevel}")
-app.logger.info(list(config["config"].items()))
+logging.basicConfig(level=loglevel)
+logging.info(f"av_gate {__version__}")
+logging.info(f"set loglevel to {loglevel}")
+logging.debug(list(config["config"].items()))
 
 clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
 
 # temporary
 VIRUS_FOUND_PDF = open("virus_found.pdf", mode="rb").read()
 
+CONTENT_MAX = config["config"].getint("content_max", 800)
 
 @app.route("/connector.sds", methods=["GET"])
 def connector_sds():
@@ -72,7 +74,7 @@ def connector_sds():
 def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
-    app.logger.debug(f"client: {upstream.content[:500]}")
+    logging.debug(f"client content: {upstream.content[:CONTENT_MAX]}")
     data = run_antivirus(upstream) or upstream.content
     return create_response(data, upstream)
 
@@ -80,17 +82,17 @@ def soap(path):
 def request_upstream(warn=True) -> Response:
     """Request to real Konnektor"""
     request_ip = request.headers["X-real-ip"]
-    app.logger.info(f"header host {request.host}")
     port = request.host.split(":")[1] if ":" in request.host else "443"
 
     client = f"{request_ip}:{port}"
+    logging.info(f"client {client}")
 
     if config.has_section(client):
         cfg = config[client]
     else:
         fallback = "*:" + port
         if not config.has_section(fallback):
-            app.logger.error(f"Client {client} not found in av_gate.ini")
+            logging.error(f"Client {client} not found in av_gate.ini")
             abort(500)
         else:
             cfg = config[fallback]
@@ -98,7 +100,7 @@ def request_upstream(warn=True) -> Response:
     konn = cfg["Konnektor"]
     url = konn + request.path
     data = request.get_data()
-    app.logger.debug(f"connector: {data[:500]}")
+    logging.debug(f"connector content: {data[:CONTENT_MAX]}")
 
     # client cert
     cert = None
@@ -123,14 +125,14 @@ def request_upstream(warn=True) -> Response:
         )
 
         if warn and bytes(konn, "ASCII") in response.content:
-            app.logger.warning(
+            logging.warning(
                 f"Found Konnektor Address in response: {konn} - {request.path}"
             )
 
         return response
 
     except Exception as err:
-        app.logger.error(err)
+        logging.error(err)
         abort(502)
 
 
@@ -146,14 +148,13 @@ def create_response(data, upstream: Response) -> Response:
     # overwrite content-length with current length
     response.headers["Content-Length"] = str(response.content_length)
 
-    app.logger.debug(f"response: {response.get_data()[:500]}")
+    logging.debug(f"response content: {response.get_data()[:CONTENT_MAX]}")
     return response
 
 
 def run_antivirus(res: Response):
     """Remove document when virus was found"""
 
-    app.logger.info(f"HEADER {res.headers}")
     # only interested in multipart
     if not res.headers["Content-Type"].lower().startswith("multipart"):
         return
@@ -170,7 +171,7 @@ def run_antivirus(res: Response):
 
     # only interested in RetrieveDocumentSet
     if response_xml is None:
-        app.logger.info(
+        logging.info(
             f"XML NOT FOUND RetrieveDocument {soap_part.get_content()[:200]}"
         )
         return
@@ -180,13 +181,12 @@ def run_antivirus(res: Response):
 
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
-        content_id = att["Content-ID"]
-        content_id = content_id[1:content_id.index("@")]
+        content_id = extract_id(att["Content-ID"])
         if scan_res[0] != "OK":
-            app.logger.info(f"virus found {content_id} : {scan_res}")
+            logging.info(f"virus found {content_id} : {scan_res}")
             virus_atts.append(content_id)
         else:
-            app.logger.info(f"scanned document {content_id} : {scan_res}")
+            logging.info(f"scanned document {content_id} : {scan_res}")
 
     if virus_atts:
         xml_resp = response_xml.find("{*}RegistryResponse")
@@ -198,31 +198,30 @@ def run_antivirus(res: Response):
         xml_documents = {}
 
         for doc in response_xml.findall("{*}DocumentResponse"):
-            content_id = doc.find("{*}Document/{*}Include").attrib["href"]
-            content_id = content_id[4:content_id.index("@")]
+            logging.debug(f"DocumentResponse: {ET.tostring(response_xml)}")
+            content_id = extract_id(doc.find("{*}Document/{*}Include").attrib["href"])
             xml_documents[content_id] = doc
 
-        app.logger.debug(f"content_ids: {list(xml_documents.keys())}")
+        logging.debug(f"content_ids: {list(xml_documents.keys())}")
 
         attachments: List[EmailMessage] = list(msg.iter_attachments())
         msg.set_payload([soap_part])
         for att in attachments:
-            content_id = att["Content-ID"]
-            content_id = content_id[1:content_id.index("@")]
+            content_id = extract_id(att["Content-ID"])
             if content_id in virus_atts:
                 document_xml = xml_documents[content_id]
                 if REMOVE_MALICIOUS:
                     add_error_msg(document_xml, xml_errlist, xml_ns)
                     # remove document reference
                     response_xml.remove(document_xml)
-                    app.logger.info(f"document removed {content_id}")
+                    logging.info(f"document removed {content_id}")
 
                 else:  # replace document
-                    app.logger.info(f"document replaced {content_id}")
+                    logging.info(f"document replaced {content_id}")
                     att.set_payload(VIRUS_FOUND_PDF)
                     msg.attach(att)
             else:
-                app.logger.debug(f"document untouched {content_id}")
+                logging.debug(f"document untouched {content_id}")
                 msg.attach(att)
 
         if REMOVE_MALICIOUS:
@@ -239,9 +238,23 @@ def run_antivirus(res: Response):
         return body
 
 
+def extract_id(id: str) -> str:
+    logging.debug(f"content_id: {id}")
+
+    if id.startswith("cid:"):
+        id = id[4:]
+    if id.startswith("<"):
+        id = id[1:-1]
+
+    if "@" in id:
+        id = id[: id.index("@")]
+
+    return id
+
+
 def add_error_msg(document_xml, xml_errlist, xml_ns):
     document_id = document_xml.find("{*}DocumentUniqueId").text
-    app.logger.info(f"removed document {document_id}")
+    logging.info(f"removed document {document_id}")
     err_text = f"Document was detected as malware for uniqueId '{document_id}'."
     xml_errlist.append(
         ET.Element(

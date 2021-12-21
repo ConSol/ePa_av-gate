@@ -293,3 +293,15 @@ Content-ID: <root.message@cxf.apache.org>
     )
 
     assert res.status_code == 200
+
+@pytest.mark.parametrize(
+    "in_id,out_id",
+    [
+        ("<345-345-345>", "345-345-345"),
+        ("cid:345-345-345", "345-345-345"),
+        ("<345-345-345@sdf>", "345-345-345"),
+        ("cid:345-345-345@sdf", "345-345-345"),
+    ],
+)
+def test_extract_id(in_id, out_id):
+    assert av_gate.extract_id(in_id) == out_id
