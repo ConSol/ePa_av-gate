@@ -39,7 +39,7 @@ config = configparser.ConfigParser()
 config.read("av_gate.ini")
 
 loglevel = config["config"].get("log_level", "ERROR")
-logging.basicConfig(level=loglevel)
+logging.basicConfig(level=loglevel, format="[%(asctime)s] %(levelname)-8s in %(module)s: %(message)s")
 logging.info(f"av_gate {__version__}")
 logging.info(f"set loglevel to {loglevel}")
 logging.debug(list(config["config"].items()))
