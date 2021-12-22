@@ -74,7 +74,6 @@ def connector_sds():
 def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
-    logging.debug(f"client content: {upstream.content[:CONTENT_MAX]}")
     data = run_antivirus(upstream) or upstream.content
     return create_response(data, upstream)
 
@@ -100,7 +99,6 @@ def request_upstream(warn=True) -> Response:
     konn = cfg["Konnektor"]
     url = konn + request.path
     data = request.get_data()
-    logging.debug(f"connector content: {data[:CONTENT_MAX]}")
 
     # client cert
     cert = None
@@ -148,7 +146,6 @@ def create_response(data, upstream: Response) -> Response:
     # overwrite content-length with current length
     response.headers["Content-Length"] = str(response.content_length)
 
-    logging.debug(f"response content: {response.get_data()[:CONTENT_MAX]}")
     return response
 
 
@@ -182,11 +179,14 @@ def run_antivirus(res: Response):
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
         content_id = extract_id(att["Content-ID"])
+        logging.debug(f"attachment {att.get_content()[:CONTENT_MAX]}")
         if scan_res[0] != "OK":
             logging.info(f"virus found {content_id} : {scan_res}")
             virus_atts.append(content_id)
         else:
             logging.info(f"scanned document {content_id} : {scan_res}")
+            if b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" in att.get_content():
+                logging.error(f"EICAR was not detected by clamav {content_id}")
 
     if virus_atts:
         xml_resp = response_xml.find("{*}RegistryResponse")
@@ -208,20 +208,22 @@ def run_antivirus(res: Response):
         msg.set_payload([soap_part])
         for att in attachments:
             content_id = extract_id(att["Content-ID"])
+            document_xml = xml_documents[content_id]
+            document_id = document_xml.find("{*}DocumentUniqueId").text
+            
             if content_id in virus_atts:
-                document_xml = xml_documents[content_id]
                 if REMOVE_MALICIOUS:
                     add_error_msg(document_xml, xml_errlist, xml_ns)
                     # remove document reference
                     response_xml.remove(document_xml)
-                    logging.info(f"document removed {content_id}")
+                    logging.info(f"document removed {content_id} {document_id}")
 
                 else:  # replace document
-                    logging.info(f"document replaced {content_id}")
+                    logging.info(f"document replaced {content_id} {document_id}")
                     att.set_payload(VIRUS_FOUND_PDF)
                     msg.attach(att)
             else:
-                logging.debug(f"document untouched {content_id}")
+                logging.debug(f"document untouched {content_id} {document_id}")
                 msg.attach(att)
 
         if REMOVE_MALICIOUS:
@@ -239,8 +241,6 @@ def run_antivirus(res: Response):
 
 
 def extract_id(id: str) -> str:
-    logging.debug(f"content_id: {id}")
-
     id = unquote(id)
 
     if id.startswith("cid:"):
@@ -254,9 +254,7 @@ def extract_id(id: str) -> str:
     return id
 
 
-def add_error_msg(document_xml, xml_errlist, xml_ns):
-    document_id = document_xml.find("{*}DocumentUniqueId").text
-    logging.info(f"removed document {document_id}")
+def add_error_msg(document_id, xml_errlist, xml_ns):
     err_text = f"Document was detected as malware for uniqueId '{document_id}'."
     xml_errlist.append(
         ET.Element(
