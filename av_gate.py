@@ -75,6 +75,7 @@ def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
     data = run_antivirus(upstream) or upstream.content
+    assert b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data    
     return create_response(data, upstream)
 
 
