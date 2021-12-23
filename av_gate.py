@@ -237,8 +237,9 @@ def run_antivirus(res: Response):
     REWRITE_SOAP = config["config"].getboolean("rewrite_soap", False)
 
     if virus_atts or REWRITE_SOAP:
-        soap_part.set_payload(ET.tostring(xml), charset="utf-8")
-        del soap_part["MIME-Version"]
+        if REMOVE_MALICIOUS or REWRITE_SOAP:
+            soap_part.set_payload(ET.tostring(xml), charset="utf-8")
+            del soap_part["MIME-Version"]
         policy = msg.policy.clone(linesep="\r\n")
         payload = msg.as_bytes(policy=policy)
         # remove headers
