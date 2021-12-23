@@ -159,10 +159,8 @@ def test_clam_av(client, clamav):
         data=open("./test/retrieveDocumentSet_req.xml", "rb").read(),
     )
 
-    parts = re.split(
-        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
-    )
-    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    xml = ET.fromstring(parts[1][re.search(b"(\r?\n){2}", parts[1]).end() :])
 
     assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
@@ -186,10 +184,8 @@ def test_virus_removed(client, clamav):
         data=data,
     )
 
-    parts = re.split(
-        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
-    )
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    xml = ET.fromstring(parts[1][re.search(b"(\r?\n){2}?", parts[1]).end() :])
 
     assert len(parts) == 5  # n+2
     assert clamav.has_been_called()
@@ -223,10 +219,8 @@ def test_virus_replaced(client, clamav):
         data=data,
     )
 
-    parts = re.split(
-        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
-    )
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     # reset config
     av_gate.config["config"]["remove_malicious"] = "true"
@@ -239,10 +233,7 @@ def test_virus_replaced(client, clamav):
         and rres.attrib["status"]
         == "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Success"
     )
-    assert (
-        b"Das Dokument ist mit einem Virus" in parts[3]
-    )
-
+    assert b"Das Dokument ist mit einem Virus" in parts[3]
 
 
 def test_virus_replaced_zip(client):
@@ -264,10 +255,8 @@ def test_virus_replaced_zip(client):
         data=data,
     )
 
-    parts = re.split(
-        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
-    )
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     # reset config
     av_gate.config["config"]["remove_malicious"] = "true"
@@ -280,9 +269,7 @@ def test_virus_replaced_zip(client):
         and rres.attrib["status"]
         == "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Success"
     )
-    assert (
-        b"Das Dokument ist mit einem Virus" in parts[3]
-    )
+    assert b"Das Dokument ist mit einem Virus" in parts[3]
 
 
 def test_all_is_virusd(client, clamav):
@@ -303,10 +290,8 @@ def test_all_is_virusd(client, clamav):
         data=data,
     )
 
-    parts = re.split(
-        b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b", res.data, flags=re.DOTALL
-    )
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 3  # n+2
     rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
@@ -336,7 +321,9 @@ Content-Type: application/xop+xml; charset=UTF-8; type="application/soap+xml"
 Content-Transfer-Encoding: binary
 Content-ID: <root.message@cxf.apache.org>
 
-""".replace(b"\n", b"\r\n")
+""".replace(
+            b"\n", b"\r\n"
+        )
         + open("./test/retrieveDocumentSet_req.xml", "rb").read()
     )
 
@@ -347,6 +334,7 @@ Content-ID: <root.message@cxf.apache.org>
     )
 
     assert res.status_code == 200
+
 
 @pytest.mark.parametrize(
     "in_id,out_id",

@@ -39,7 +39,9 @@ config = configparser.ConfigParser()
 config.read("av_gate.ini")
 
 loglevel = config["config"].get("log_level", "ERROR")
-logging.basicConfig(level=loglevel, format="[%(asctime)s] %(levelname)-8s in %(module)s: %(message)s")
+logging.basicConfig(
+    level=loglevel, format="[%(asctime)s] %(levelname)-8s in %(module)s: %(message)s"
+)
 logging.info(f"av_gate {__version__}")
 logging.info(f"set loglevel to {loglevel}")
 logging.debug(list(config["config"].items()))
@@ -50,6 +52,7 @@ clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
 VIRUS_FOUND_PDF = open("virus_found.pdf", mode="rb").read()
 
 CONTENT_MAX = config["config"].getint("content_max", 800)
+
 
 @app.route("/connector.sds", methods=["GET"])
 def connector_sds():
@@ -74,8 +77,11 @@ def connector_sds():
 def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
-    data = run_antivirus(upstream) or upstream.content
-    assert b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data    
+    data = run_antivirus(upstream)
+    if not data:
+        logging.info("no new body, copying content from konnektor")
+        data = upstream.content
+    assert b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
     return create_response(data, upstream)
 
 
@@ -169,9 +175,7 @@ def run_antivirus(res: Response):
 
     # only interested in RetrieveDocumentSet
     if response_xml is None:
-        logging.info(
-            f"XML NOT FOUND RetrieveDocument {soap_part.get_content()[:200]}"
-        )
+        logging.info(f"XML NOT FOUND RetrieveDocument {soap_part.get_content()[:200]}")
         return
 
     virus_atts = []
@@ -211,7 +215,7 @@ def run_antivirus(res: Response):
             content_id = extract_id(att["Content-ID"])
             document_xml = xml_documents[content_id]
             document_id = document_xml.find("{*}DocumentUniqueId").text
-            
+
             if content_id in virus_atts:
                 if REMOVE_MALICIOUS:
                     add_error_msg(document_xml, xml_errlist, xml_ns)
@@ -233,10 +237,14 @@ def run_antivirus(res: Response):
     REWRITE_SOAP = config["config"].getboolean("rewrite_soap", False)
 
     if virus_atts or REWRITE_SOAP:
-        orig_header = res.content[: res.content.find(b"<soap:Envelope")]
         soap_part.set_payload(ET.tostring(xml), charset="utf-8")
-        payload = msg.as_bytes()
-        body = orig_header + payload[payload.find(b"<soap:Envelope") :]
+        del soap_part["MIME-Version"]
+        policy = msg.policy.clone(linesep="\r\n")
+        payload = msg.as_bytes(policy=policy)
+        # remove headers
+        body = payload[re.search(b"(\r?\n){3}", payload).end() :]
+        logging.info("creating new body")
+        logging.debug(body[:CONTENT_MAX])
 
         return body
 
