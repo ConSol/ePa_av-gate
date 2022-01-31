@@ -37,6 +37,22 @@ def client(monkeypatch):
                         content=open("samples/connector.sds", "rb").read()
                     )
 
+                if b"GET_EICAR_MIME" in data:
+                    return MockResponse(
+                        headers={
+                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
+                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
+                            'start="<root.message@cxf.apache.org>"; '
+                            'start-info="application/soap+xml";charset=UTF-8'
+                        },
+                        content=open("samples/retrievedocument-resp_eicar", "rb")
+                        .read()
+                        .replace(
+                            b"<ns5:mimeType>application/pdf</ns5:mimeType>",
+                            b"<ns5:mimeType>application/xml</ns5:mimeType>",
+                        ),
+                    )
+
                 if b"GET_EICAR" in data:
                     return MockResponse(
                         headers={
@@ -224,8 +240,40 @@ def test_virus_replaced(client, clamav):
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
-    # reset config
-    av_gate.config["config"]["remove_malicious"] = "true"
+    assert len(parts) == 6  # n+2
+    assert clamav.has_been_called()
+    rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
+    assert (
+        rres is not None
+        and rres.attrib["status"]
+        == "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Success"
+    )
+    assert b"potentiell schadhafter Code" in parts[3]
+    assert b'<?xml version="1.0" encoding="UTF-8"?>' in parts[3]
+
+
+def test_virus_replaced_mimetype(client, clamav):
+    "check virus is replaced with same mimetype"
+
+    av_gate.REMOVE_MALICIOUS = False
+
+    data = (
+        open("./test/retrieveDocumentSet_req.xml", "rb")
+        .read()
+        .replace(
+            b"<DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>",
+            b"<DocumentUniqueId>GET_EICAR_MIME</DocumentUniqueId>",
+        )
+    )
+
+    res = client.post(
+        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
+        data=data,
+    )
+
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
@@ -260,9 +308,6 @@ def test_virus_replaced_zip(client):
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
-
-    # reset config
-    av_gate.config["config"]["remove_malicious"] = "true"
 
     assert len(parts) == 6  # n+2
     # assert clamav.has_been_called()
