@@ -7,7 +7,6 @@ import av_gate
 import pytest
 import requests
 
-
 av_gate.config.read_dict(
     {
         "config": {"remove_malicious": True},
@@ -31,7 +30,7 @@ def client(monkeypatch):
                 def __init__(self, **kwargs):
                     self.__dict__.update(kwargs)
 
-            def mock_request(url: str, data: str, *args, **kwargs):
+            def mock_request(url: str, data: bytes, *args, **kwargs):
 
                 if url.endswith("connector.sds"):
                     return MockResponse(
@@ -169,6 +168,8 @@ def test_clam_av(client, clamav):
 def test_virus_removed(client, clamav):
     "check virus is removed"
 
+    av_gate.REMOVE_MALICIOUS = True
+
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
@@ -203,7 +204,8 @@ def test_virus_removed(client, clamav):
 def test_virus_replaced(client, clamav):
     "check virus is removed"
 
-    av_gate.config["config"]["remove_malicious"] = "false"
+    av_gate.REMOVE_MALICIOUS = False
+
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
@@ -233,13 +235,14 @@ def test_virus_replaced(client, clamav):
         and rres.attrib["status"]
         == "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Success"
     )
-    assert b"Das Dokument ist mit einem Virus" in parts[3]
+    assert b"potentiell schadhafter Code" in parts[3]
 
 
 def test_virus_replaced_zip(client):
     "check virus is replaced on real zip - needs clamav running"
 
-    av_gate.config["config"]["remove_malicious"] = "false"
+    av_gate.REMOVE_MALICIOUS = False
+
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
@@ -269,11 +272,13 @@ def test_virus_replaced_zip(client):
         and rres.attrib["status"]
         == "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Success"
     )
-    assert b"Das Dokument ist mit einem Virus" in parts[3]
+    assert b"potentiell schadhafter Code" in parts[3]
 
 
 def test_all_is_virusd(client, clamav):
     "check different error message if all msg are malicious"
+
+    av_gate.REMOVE_MALICIOUS = True
 
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")

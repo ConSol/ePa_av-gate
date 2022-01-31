@@ -2,13 +2,14 @@ import configparser
 import email.parser
 import email.policy
 import io
+import logging
+import os
 import re
 from email.message import EmailMessage
-from typing import List
+from typing import AnyStr, List, cast
 from urllib.parse import unquote, urlparse
-import logging
 
-import clamd
+import clamd  # type: ignore
 import lxml.etree as ET
 import requests
 import urllib3
@@ -28,7 +29,7 @@ ALL_METHODS = [
     "PATCH",
 ]
 
-reg_retrieve_document = re.compile(b":RetrieveDocumentSetRequest</Action>")
+reg_retrieve_document = re.compile(":RetrieveDocumentSetRequest</Action>")
 
 # to prevent flooding log
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -46,12 +47,13 @@ logging.info(f"av_gate {__version__}")
 logging.info(f"set loglevel to {loglevel}")
 logging.debug(list(config["config"].items()))
 
-clamav = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
-
-# temporary
-VIRUS_FOUND_PDF = open("virus_found.pdf", mode="rb").read()
+clamav: clamd.ClamdUnixSocket = clamd.ClamdUnixSocket(
+    path=config["config"]["clamd_socket"]
+)
 
 CONTENT_MAX = config["config"].getint("content_max", 800)
+REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
+REWRITE_SOAP = config["config"].getboolean("rewrite_soap", False)
 
 
 @app.route("/connector.sds", methods=["GET"])
@@ -85,7 +87,7 @@ def soap(path):
     return create_response(data, upstream)
 
 
-def request_upstream(warn=True) -> Response:
+def request_upstream(warn=True):
     """Request to real Konnektor"""
     request_ip = request.headers["X-real-ip"]
     port = request.host.split(":")[1] if ":" in request.host else "443"
@@ -156,7 +158,7 @@ def create_response(data, upstream: Response) -> Response:
     return response
 
 
-def run_antivirus(res: Response):
+def run_antivirus(res: requests.Response):
     """Remove document when virus was found"""
 
     # only interested in multipart
@@ -169,72 +171,72 @@ def run_antivirus(res: Response):
         + res.content
     )
     msg = email.parser.BytesParser(policy=email.policy.default).parsebytes(body)
-    soap_part: EmailMessage = next(msg.iter_parts())
-    xml = ET.fromstring(soap_part.get_content())
+    soap_part: EmailMessage = next(msg.iter_parts())  # type: ignore
+    xml = ET.fromstring(soap_part.get_payload())
     response_xml = xml.find("{*}Body/{*}RetrieveDocumentSetResponse")
 
     # only interested in RetrieveDocumentSet
     if response_xml is None:
-        logging.info(f"XML NOT FOUND RetrieveDocument {soap_part.get_content()[:200]}")
+        logging.info(f"XML NOT FOUND RetrieveDocument {soap_part.get_payload()[:200]}")
         return
 
-    virus_atts = []
-    REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
-
-    for att in msg.iter_attachments():
-        scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
-        content_id = extract_id(att["Content-ID"])
-        logging.debug(f"attachment {att.get_content()[:CONTENT_MAX]}")
-        if scan_res[0] != "OK":
-            logging.info(f"virus found {content_id} : {scan_res}")
-            virus_atts.append(content_id)
-        else:
-            logging.info(f"scanned document {content_id} : {scan_res}")
-            if b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" in att.get_content():
-                logging.error(f"EICAR was not detected by clamav {content_id}")
+    virus_atts = list(get_malicious_content_ids(msg))
 
     if virus_atts:
         xml_resp = response_xml.find("{*}RegistryResponse")
-        xml_ns = re.search("{.*}", xml_resp.tag)[0]
-        xml_errlist = ET.Element(f"{xml_ns}RegistryErrorList")
-        if REMOVE_MALICIOUS:
+        assert xml_resp is not None
+        m = re.search("{.*}", xml_resp.tag)
+        assert m
+        xml_ns = m[0]
+        xml_errlist = xml_resp.find("{*}RegistryErrorList")
+        if not xml_errlist:
+            xml_errlist = ET.Element(f"{xml_ns}RegistryErrorList")
             xml_resp.append(xml_errlist)
 
         xml_documents = {}
 
         for doc in response_xml.findall("{*}DocumentResponse"):
-            logging.debug(f"DocumentResponse: {ET.tostring(response_xml)}")
-            content_id = extract_id(doc.find("{*}Document/{*}Include").attrib["href"])
+            include = doc.find("{*}Document/{*}Include")
+            assert include is not None
+            href = cast(str, include.attrib["href"])
+            assert href
+            content_id = extract_id(href)
             xml_documents[content_id] = doc
 
         logging.debug(f"content_ids: {list(xml_documents.keys())}")
 
-        attachments: List[EmailMessage] = list(msg.iter_attachments())
+        attachments: List[EmailMessage] = list(msg.iter_attachments())  # type: ignore
         msg.set_payload([soap_part])
         for att in attachments:
             content_id = extract_id(att["Content-ID"])
             document_xml = xml_documents[content_id]
-            document_id = document_xml.find("{*}DocumentUniqueId").text
+            unique_id_xml = document_xml.find("{*}DocumentUniqueId")
+            assert unique_id_xml is not None
+            document_id = unique_id_xml.text
+            mimetype_xml = document_xml.find("{*}mimeType")
+            assert mimetype_xml is not None
+            mimetype = mimetype_xml.text
 
             if content_id in virus_atts:
                 if REMOVE_MALICIOUS:
                     add_error_msg(document_xml, xml_errlist, xml_ns)
                     # remove document reference
                     response_xml.remove(document_xml)
-                    logging.info(f"document removed {content_id} {document_id}")
+                    logging.info(f"document removed {content_id!r} {document_id!r}")
 
-                else:  # replace document
-                    logging.info(f"document replaced {content_id} {document_id}")
-                    att.set_payload(VIRUS_FOUND_PDF)
+                else:
+                    # replace document
+                    logging.info(
+                        f"document replaced {content_id!r} {document_id!r} {mimetype!r}"
+                    )
+                    att.set_payload(get_replacement(mimetype))
                     msg.attach(att)
             else:
-                logging.debug(f"document untouched {content_id} {document_id}")
+                logging.debug(f"document untouched {content_id!r} {document_id!r}")
                 msg.attach(att)
 
         if REMOVE_MALICIOUS:
             fix_status(xml_resp, xml_errlist, xml_ns, msg)
-
-    REWRITE_SOAP = config["config"].getboolean("rewrite_soap", False)
 
     if virus_atts or REWRITE_SOAP:
         if REMOVE_MALICIOUS or REWRITE_SOAP:
@@ -243,21 +245,37 @@ def run_antivirus(res: Response):
         policy = msg.policy.clone(linesep="\r\n")
         payload = msg.as_bytes(policy=policy)
         # remove headers
-        body = payload[re.search(b"(\r?\n){3}", payload).end() :]
+        m = re.search(b"(\r?\n){3}", payload)  # type: ignore
+        assert m
+        body = payload[m.end() :]
         logging.info("creating new body")
         logging.debug(body[:CONTENT_MAX])
 
         return body
 
 
+def get_malicious_content_ids(msg):
+    """Extracting content_ids of malicious attachments"""
+    for att in msg.iter_attachments():
+        scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
+        content_id = extract_id(att["Content-ID"])
+        if scan_res[0] != "OK":
+            logging.info(f"virus found {content_id} : {scan_res}")
+            yield content_id
+        else:
+            logging.info(f"scanned document {content_id} : {scan_res}")
+            if b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" in att.get_content():
+                logging.error(f"EICAR was not detected by clamav {content_id}")
+
+
 def extract_id(id: str) -> str:
+    """Returns content_id without prefix and postfix"""
     id = unquote(id)
 
     if id.startswith("cid:"):
         id = id[4:]
     if id.startswith("<"):
         id = id[1:-1]
-
     if "@" in id:
         id = id[: id.index("@")]
 
@@ -265,6 +283,7 @@ def extract_id(id: str) -> str:
 
 
 def add_error_msg(document_id, xml_errlist, xml_ns):
+    """Adds error message to SOAP message for given document"""
     err_text = f"Document was detected as malware for uniqueId '{document_id}'."
     xml_errlist.append(
         ET.Element(
@@ -281,6 +300,7 @@ def add_error_msg(document_id, xml_errlist, xml_ns):
 
 
 def fix_status(xml_resp, xml_errlist, xml_ns, msg):
+    """Adds overall error message to SOAP response"""
     if len(msg.get_payload()) > 1:
         xml_resp.attrib["status"] = "urn:ihe:iti:2007:ResponseStatusType:PartialSuccess"
     else:
@@ -298,6 +318,20 @@ def fix_status(xml_resp, xml_errlist, xml_ns, msg):
                 text="No documents found for unique ids in request",
             )
         )
+
+
+# create dictonary with mimetypes: filename
+replacement_files = {
+    os.path.splitext(dir_entry.name)[0].replace("_", "/"): dir_entry.path
+    for dir_entry in os.scandir("replacements")
+}
+
+
+def get_replacement(mimetype):
+    """get content for replacements"""
+    filename = replacement_files.get(mimetype) or replacement_files.get("text/plain")
+    with open(filename, "rb") as f:
+        return f.read()
 
 
 if __name__ == "__main__":

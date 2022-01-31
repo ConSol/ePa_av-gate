@@ -5,3 +5,4 @@ settings.json
 cert
 **/__pycache__/*
 .DS_Store
+.dmypy.json
