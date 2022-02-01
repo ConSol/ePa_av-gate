@@ -122,7 +122,9 @@ Auf jeden Arbeitsplatzrechner muss in der Konfiguration der Primärsysteme die I
 > **Warnung:** Wird auf einem Arbeitsplatzrechner der Konnektor nicht angepasst, erfolgt kein AV-Scan der Dokumente! Das Primärsystem wird aber dennoch wie bisher auch funktionieren - dies lässt sich technisch auch nicht verhindern.
 
 Das Logging des AV-Gates erfolgt über uWSGI.
+## Docker
 
+Das Dockerfile ist vollständig lauffähig und soll die Installation veranschaulichen. Es es nicht empfehlenswert, das Docker-Image für den produktiven Einsatz zu verwenden, da es aufgrund fehlender Threads sehr ineffizient ist. Die Logs wurden nicht für Docker optimiert.
 
 ## Primärsysteme
 Das AV-Gate wurde für folgende Primärsysteme getestet:
