@@ -4,7 +4,16 @@ Proxy für den Antivirus-Scan von Dokumenten zu der elektronischen Patientenakte
 
 Bei einem Fund von Malware wird das Dokument aus der Übertragung herausgenommen. Stattdessen wird eine Fehlermeldung für das entsprechende Dokument an das Primärsystem übergeben. Veränderungen an dem Repository der ePA selbst werden nicht vorgenommen.
 
-Für den AV-Scan wird die open-source Lösung [ClamAV](https://www.clamav.net/) genutzt.
+Alternativ kann das Dokument bei Fund von Maleware durch eine Datei gleichen Types (Mime-Type) ersetzt werden. In diesem Fall wird der Payload des Soap-Responses nicht verändert. Dies ist notwendig, wenn das Primärsystem die Fehlermeldungen nicht verarbeiten kann. Die Ersatz-Dokumente liegen in dem Unterverzeichnis `replacements` und enthalten jweils den Hinweis:
+
+> Das Dokument wurde ersetzt, weil beim originären Dokument potentiell schadhafter Code entdeckt wurde.  
+Das Original wird nicht ausgeliefert. 
+
+Für den AV-Scan wird die open-source Lösung [ClamAV](https://www.clamav.net/) genutzt. Es erkennt schadhaften Code auch in Anhängen zu PDF, Excel und Word und OpenOffice Dokumenten. Testdateien mit der harmlosen [EICAR](https://www.eicar.org/?page_id=3950) Test-Signatur befinden sich für alle Mime-Typen im Verzeichnis `testfiles`. 
+
+Alternative AV-Scanner können nicht verwendet werden, da keine andere der bekannten Lösungen über eine programatische Schnittstelle für den Scan verfügt.
+
+Macros in Excel und Word-Dokumenten sind für die zugelassenen Dateitypen (.xlsx .docx) nicht möglich bzw. enthalten. (Die Entsprechenden Dateitypen für Dokumente mit Macro  lauten .xlsm und .docm)
 
 ## Architektur und Funktionsweise
 
@@ -38,6 +47,26 @@ Die aus dem Response extrahierten Dokumente werden via socket stream an den clam
 
 9: Remove Document  
 Der XOP Teil der Nachricht für die betroffenen Dokumente wird entfernt und eine Fehlermeldung wird in den SOAP-Response geschrieben.
+Alternativ wird hier das Dokument ersetzt und der SOAP-Response ansonst nicht verändert.
+
+Der Ersatz der schadhaften Dokumente erfolgt mit den jeweiligen Dateien aus dem Verzeichnis `replacements'. Es sind für folgende Dateitypen/Mime-Typen Dokumente vorhanden:
+- application/pdf
+- image/jpeg
+- image/png
+- image/tiff
+- text/plain
+- text/rtf
+- application/xml
+- application/hl7-v3
+- application/pkcs7-mime
+- application/fhir+xml
+### Office Dokumente
+- application/vnd.openxmlformats-officedocument.wordprocessingml.document (.docx)
+- application/vnd.openxmlformats-officedocument.spreadsheetml.sheet (.xlsx)
+- application/vnd.oasis.opendocument.text (.odt)
+- application/vnd.oasis.opendocument.spreadsheet (.ods)
+
+Die Office-Dokumente sind in der aktuellen Version von ePA nicht mehr zugelassen, dennoch werden diese hier noch berücksichtigt, weil bestehende Dokumente unverändert ausgeliefert werden.
 
 ## ClamAV
 
@@ -97,6 +126,7 @@ Das Logging des AV-Gates erfolgt über uWSGI.
 
 ## Primärsysteme
 Das AV-Gate wurde für folgende Primärsysteme getestet:
+TODO
 
 | Primärsystem | Version | Status | Anmerkung |
 |---|---|---|---|
@@ -106,4 +136,4 @@ Das AV-Gate wurde für folgende Primärsysteme getestet:
 
 Consol GmbH  
 Norbert Ferchen  
-November 2021
+Januar 2022
