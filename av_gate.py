@@ -53,7 +53,6 @@ clamav: clamd.ClamdUnixSocket = clamd.ClamdUnixSocket(
 
 CONTENT_MAX = config["config"].getint("content_max", 800)
 REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
-REWRITE_SOAP = config["config"].getboolean("rewrite_soap", False)
 
 
 @app.route("/connector.sds", methods=["GET"])
@@ -188,6 +187,8 @@ def run_antivirus(res: requests.Response):
         m = re.search("{.*}", xml_resp.tag)
         assert m
         xml_ns = m[0]
+
+        # ger errlist
         xml_errlist = xml_resp.find("{*}RegistryErrorList")
         if not xml_errlist:
             xml_errlist = ET.Element(f"{xml_ns}RegistryErrorList")
@@ -208,42 +209,21 @@ def run_antivirus(res: requests.Response):
         attachments: List[EmailMessage] = list(msg.iter_attachments())  # type: ignore
         msg.set_payload([soap_part])
         for att in attachments:
-            content_id = extract_id(att["Content-ID"])
-            document_xml = xml_documents[content_id]
-            unique_id_xml = document_xml.find("{*}DocumentUniqueId")
-            assert unique_id_xml is not None
-            document_id = unique_id_xml.text
-            mimetype_xml = document_xml.find("{*}mimeType")
-            assert mimetype_xml is not None
-            mimetype = mimetype_xml.text
-
-            if content_id in virus_atts:
-                if REMOVE_MALICIOUS:
-                    add_error_msg(document_xml, xml_errlist, xml_ns)
-                    # remove document reference
-                    response_xml.remove(document_xml)
-                    logging.info(f"document removed {content_id!r} {document_id!r}")
-
-                else:
-                    # replace document
-                    logging.info(
-                        f"document replaced {content_id!r} {document_id!r} {mimetype!r}"
-                    )
-                    att.set_payload(get_replacement(mimetype))
-                    msg.attach(att)
-            else:
-                logging.debug(f"document untouched {content_id!r} {document_id!r}")
-                msg.attach(att)
+            handle_attachment(
+                msg, response_xml, virus_atts, xml_ns, xml_errlist, xml_documents, att
+            )
 
         if REMOVE_MALICIOUS:
             fix_status(xml_resp, xml_errlist, xml_ns, msg)
 
-    if virus_atts or REWRITE_SOAP:
-        if REMOVE_MALICIOUS or REWRITE_SOAP:
+    if virus_atts:
+        if REMOVE_MALICIOUS:
             soap_part.set_payload(ET.tostring(xml), charset="utf-8")
             del soap_part["MIME-Version"]
+
         policy = msg.policy.clone(linesep="\r\n")
         payload = msg.as_bytes(policy=policy)
+
         # remove headers
         m = re.search(b"(\r?\n){3}", payload)  # type: ignore
         assert m
@@ -252,6 +232,38 @@ def run_antivirus(res: requests.Response):
         logging.debug(body[:CONTENT_MAX])
 
         return body
+
+
+def handle_attachment(
+    msg, response_xml, virus_atts, xml_ns, xml_errlist, xml_documents, att
+):
+    """removes or replaces malicious attachment"""
+    content_id = extract_id(att["Content-ID"])
+    document_xml = xml_documents[content_id]
+    unique_id_xml = document_xml.find("{*}DocumentUniqueId")
+    assert unique_id_xml is not None
+    document_id = unique_id_xml.text
+    mimetype_xml = document_xml.find("{*}mimeType")
+    assert mimetype_xml is not None
+    mimetype = mimetype_xml.text
+
+    if content_id in virus_atts:
+        if REMOVE_MALICIOUS:
+            add_error_msg(document_xml, xml_errlist, xml_ns)
+            # remove document reference
+            response_xml.remove(document_xml)
+            logging.info(f"document removed {content_id!r} {document_id!r}")
+
+        else:
+            # replace document
+            logging.info(
+                f"document replaced {content_id!r} {document_id!r} {mimetype!r}"
+            )
+            att.set_payload(get_replacement(mimetype))
+            msg.attach(att)
+    else:
+        logging.debug(f"document untouched {content_id!r} {document_id!r}")
+        msg.attach(att)
 
 
 def get_malicious_content_ids(msg):
