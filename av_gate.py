@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from email.message import EmailMessage
-from typing import AnyStr, List, cast
+from typing import List, cast
 from urllib.parse import unquote, urlparse
 
 import clamd  # type: ignore
@@ -79,11 +79,24 @@ def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
     data = run_antivirus(upstream)
+
     if not data:
         logging.info("no new body, copying content from konnektor")
         data = upstream.content
+
     assert b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
-    return create_response(data, upstream)
+
+    response = create_response(data, upstream)
+
+    if data:
+        logging.debug(
+            f"*** ORIG RESP {upstream.status_code}\n{dump(upstream.raw.headers)}\n\n{upstream.content[:CONTENT_MAX]}\n"
+        )
+        logging.debug(
+            f"*** NEW  RESP {response.status_code}\n{dump(response.headers)}\n\n{response.get_data()[:CONTENT_MAX]}\n"
+        )
+
+    return response
 
 
 def request_upstream(warn=True):
@@ -144,15 +157,28 @@ def request_upstream(warn=True):
 
 def create_response(data, upstream: Response) -> Response:
     """Create new response with copying headers from origin response"""
-    response = Response(data)
+    headers = {
+        k: v
+        for (k, v) in upstream.headers.items()
+        if k
+        not in (
+            "Content-Length",
+            "Connection",
+            "Date",
+            "Transfer-Encoding",
+            "Mimetype",
+            "Content-Type",
+        )
+    }
 
-    # copy headers from upstream response
-    for k, v in upstream.headers.items():
-        if k not in ["Transfer-Encoding", "Content-Length"]:
-            response.headers[k] = v
-
-    # overwrite content-length with current length
-    response.headers["Content-Length"] = str(response.content_length)
+    response = Response(
+        response=data,
+        status=upstream.status_code,
+        headers=headers,
+        mimetype=upstream.headers.get("Mimetype"),
+        content_type=upstream.headers.get("Content-Type"),
+        direct_passthrough=True,
+    )
 
     return response
 
@@ -344,6 +370,10 @@ def get_replacement(mimetype):
     filename = replacement_files.get(mimetype) or replacement_files.get("text/plain")
     with open(filename, "rb") as f:
         return f.read()
+
+
+def dump(dict):
+    return "\n".join([f"{k}: {v}" for (k, v) in dict.items()])
 
 
 if __name__ == "__main__":

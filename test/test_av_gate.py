@@ -1,5 +1,6 @@
 import io
 import re
+from unittest import mock
 import xml.etree.ElementTree as ET
 from unittest.mock import Mock
 
@@ -26,6 +27,9 @@ def client(monkeypatch):
             class MockResponse:
                 headers = {"Test-Header": "bla"}
                 content = b"""bla bla"""
+                status_code = 200
+                raw = mock.Mock()
+                raw.headers = {"bla": "foo"}
 
                 def __init__(self, **kwargs):
                     self.__dict__.update(kwargs)
