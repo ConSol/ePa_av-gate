@@ -29,17 +29,17 @@ curl -v \
       <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
         <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</HomeCommunityId>
         <RepositoryUniqueId>1.2.276.0.76.3.1.91.1</RepositoryUniqueId>
-        <DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>
+        <DocumentUniqueId>2.25.123657184201295845861</DocumentUniqueId>
       </DocumentRequest>
       <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
         <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</HomeCommunityId>
         <RepositoryUniqueId>1.2.276.0.76.3.1.91.1</RepositoryUniqueId>
-        <DocumentUniqueId>2.25.83711722020886177921</DocumentUniqueId>
+        <DocumentUniqueId>2.25.271901047428199838029</DocumentUniqueId>
       </DocumentRequest>
       <DocumentRequest xmlns="urn:ihe:iti:xds-b:2007">
         <HomeCommunityId>urn:oid:1.2.276.0.76.3.1.91.1</HomeCommunityId>
         <RepositoryUniqueId>1.2.276.0.76.3.1.91.1</RepositoryUniqueId>
-        <DocumentUniqueId>2.25.102925591037611682627</DocumentUniqueId>
+        <DocumentUniqueId>2.25.234677361812986750726</DocumentUniqueId>
       </DocumentRequest>
     </RetrieveDocumentSetRequest>
   </soap:Body>
