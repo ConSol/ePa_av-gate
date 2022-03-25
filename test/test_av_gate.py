@@ -242,7 +242,7 @@ def test_virus_replaced(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
 
     assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
@@ -277,7 +277,7 @@ def test_virus_replaced_mimetype(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
 
     assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
@@ -311,7 +311,7 @@ def test_virus_replaced_zip(client):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
 
     assert len(parts) == 6  # n+2
     # assert clamav.has_been_called()
@@ -345,7 +345,7 @@ def test_all_is_virusd(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
 
     assert len(parts) == 3  # n+2
     rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")

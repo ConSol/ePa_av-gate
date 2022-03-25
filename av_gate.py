@@ -247,8 +247,7 @@ def run_antivirus(res: requests.Response):
             soap_part.set_payload(ET.tostring(xml), charset="utf-8")
             del soap_part["MIME-Version"]
 
-        policy = msg.policy.clone(linesep="\r\n")
-        payload = msg.as_bytes(policy=policy)
+        payload = msg.as_bytes()
 
         # remove headers
         m = re.search(b"(\r?\n){3}", payload)  # type: ignore
