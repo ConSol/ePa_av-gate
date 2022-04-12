@@ -1,5 +1,5 @@
 #! /bin/bash
-curl -v --location --request POST 'https://kon-instanz1.titus.ti-dienste.de/soap-api/PHRService/1.3.0' \
+curl -v --location --request POST 'https://kon-instanz1.titus.gematik.solutions/soap-api/PHRService/1.3.0' \
 --header 'Content-Type: application/xml' \
 --insecure --cert-type P12 --cert ./cert/ps_epa_consol_01.p12:00 \
 --data-raw '<?xml version="1.0" encoding="UTF-8"?>
