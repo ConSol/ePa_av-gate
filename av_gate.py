@@ -1,10 +1,13 @@
 import configparser
+import email.generator
 import email.parser
 import email.policy
 import io
+import itertools
 import logging
 import os
 import re
+from difflib import unified_diff
 from email.message import EmailMessage
 from typing import List, cast
 from urllib.parse import unquote, urlparse
@@ -84,17 +87,18 @@ def soap(path):
         logging.info("no new body, copying content from konnektor")
         data = upstream.content
 
-    assert b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
+    assert (
+        b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
+    ), "found EICAR signature"
 
     response = create_response(data, upstream)
 
-    if data:
-        logging.debug(
-            f"*** ORIG RESP {upstream.status_code}\n{dump(upstream.raw.headers)}\n\n{upstream.content[:CONTENT_MAX]}\n"
-        )
-        logging.debug(
-            f"*** NEW  RESP {response.status_code}\n{dump(response.headers)}\n\n{response.get_data()[:CONTENT_MAX]}\n"
-        )
+    if logging.getLogger().isEnabledFor(logging.DEBUG) and data:
+        t_data = data.decode("utf-8", errors="replace").splitlines(True)
+        t_upstream = upstream.content.decode("utf-8", errors="replace").splitlines(True)
+        diff = "".join(itertools.islice(unified_diff(t_data, t_upstream), 20))
+        if diff:
+            logging.debug(f"Diff found\n{diff}...")
 
     return response
 
@@ -143,7 +147,7 @@ def request_upstream(warn=True):
             verify=verify,
         )
 
-        if warn and bytes(konn, "ASCII") in response.content:
+        if warn and bytes(konn, "ascii") in response.content:
             logging.warning(
                 f"Found Konnektor Address in response: {konn} - {request.path}"
             )
@@ -195,7 +199,9 @@ def run_antivirus(res: requests.Response):
         bytes(f"Content-Type: {res.headers['Content-Type']}\r\n\r\n\r\n", "ascii")
         + res.content
     )
-    msg = email.parser.BytesParser(policy=email.policy.default).parsebytes(body)
+    msg: EmailMessage = email.parser.BytesParser(
+        policy=email.policy.default
+    ).parsebytes(body)
     soap_part: EmailMessage = next(msg.iter_parts())  # type: ignore
     xml = ET.fromstring(soap_part.get_payload())
     response_xml = xml.find("{*}Body/{*}RetrieveDocumentSetResponse")
@@ -247,16 +253,12 @@ def run_antivirus(res: requests.Response):
             soap_part.set_payload(ET.tostring(xml), charset="utf-8")
             del soap_part["MIME-Version"]
 
-        payload = msg.as_bytes()
+        payload = build_payload(msg, virus_atts, res)
 
-        # remove headers
-        m = re.search(b"(\r?\n){3}", payload)  # type: ignore
-        assert m
-        body = payload[m.end() :]
         logging.info("creating new body")
         logging.debug(body[:CONTENT_MAX])
 
-        return body
+        return payload
 
 
 def handle_attachment(
@@ -297,6 +299,7 @@ def get_malicious_content_ids(msg):
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
         content_id = extract_id(att["Content-ID"])
         if scan_res[0] != "OK":
+            # if att.get_content().startswith(b"%PDF"): # for manuel testing:
             logging.info(f"virus found {content_id} : {scan_res}")
             yield content_id
         else:
@@ -355,6 +358,41 @@ def fix_status(xml_resp, xml_errlist, xml_ns, msg):
                 text="No documents found for unique ids in request",
             )
         )
+
+
+def build_payload(msg: EmailMessage, virus_atts: List[str], res: requests.Response):
+    "create payload based on original response with replacing only payoad for virus_atts"
+
+    content_type = res.headers["Content-Type"]
+    m = re.search('boundary="(.*?)"', content_type)
+    assert m
+    boundary = b"\r\n--" + bytes(m[1], "ascii")
+
+    payload: List[bytes] = []
+    for part in res.content.split(boundary):
+        content_id = get_content_id(part)
+        if (
+            content_id in virus_atts
+            or content_id == "root.message"
+            and REMOVE_MALICIOUS
+        ):
+            att = next(
+                (a for a in msg.iter_parts() if content_id in a.get("Content-ID")), None
+            )
+            if att:
+                content = att.get_content()  # type: ignore
+                payload.append(part.split(b"\r\n\r\n")[0] + b"\r\n\r\n" + content)
+
+        else:
+            payload.append(part)
+
+    return boundary.join(payload)
+
+
+def get_content_id(content: bytes):
+    m = re.search(b"\r\nContent-ID: (.*?)\r\n", content)  # type: ignore
+    if m:
+        return extract_id(m[1].decode("ascii"))
 
 
 # create dictonary with mimetypes: filename

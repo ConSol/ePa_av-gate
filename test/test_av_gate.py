@@ -24,6 +24,13 @@ def client(monkeypatch):
         with av_gate.app.app_context():
 
             # Mock Requests
+            headers = {
+                "Content-Type": 'multipart/related; type="application/xop+xml"; '
+                'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
+                'start="<root.message@cxf.apache.org>"; '
+                'start-info="application/soap+xml";charset=UTF-8'
+            }
+
             class MockResponse:
                 headers = {"Test-Header": "bla"}
                 content = b"""bla bla"""
@@ -38,19 +45,17 @@ def client(monkeypatch):
 
                 if url.endswith("connector.sds"):
                     return MockResponse(
-                        content=open("samples/connector.sds", "rb").read()
+                        content=open("samples/connector.sds", "rb")
+                        .read()
+                        .replace(b"\n", b"\r\n")
                     )
 
                 if b"GET_EICAR_MIME" in data:
                     return MockResponse(
-                        headers={
-                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
-                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
-                            'start="<root.message@cxf.apache.org>"; '
-                            'start-info="application/soap+xml";charset=UTF-8'
-                        },
+                        headers=headers,
                         content=open("samples/retrievedocument-resp_eicar", "rb")
                         .read()
+                        .replace(b"\n", b"\r\n")
                         .replace(
                             b"<ns5:mimeType>application/pdf</ns5:mimeType>",
                             b"<ns5:mimeType>application/xml</ns5:mimeType>",
@@ -59,51 +64,33 @@ def client(monkeypatch):
 
                 if b"GET_EICAR" in data:
                     return MockResponse(
-                        headers={
-                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
-                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
-                            'start="<root.message@cxf.apache.org>"; '
-                            'start-info="application/soap+xml";charset=UTF-8'
-                        },
-                        content=open(
-                            "samples/retrievedocument-resp_eicar", "rb"
-                        ).read(),
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp_eicar", "rb")
+                        .read()
+                        .replace(b"\n", b"\r\n"),
                     )
 
                 if b"ALL_EICAR" in data:
                     return MockResponse(
-                        headers={
-                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
-                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
-                            'start="<root.message@cxf.apache.org>"; '
-                            'start-info="application/soap+xml";charset=UTF-8'
-                        },
-                        content=open(
-                            "samples/retrievedocument-resp_all_eicar", "rb"
-                        ).read(),
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp_all_eicar", "rb")
+                        .read()
+                        .replace(b"\n", b"\r\n"),
                     )
 
                 if b"ZIP_EICAR" in data:
                     return MockResponse(
-                        headers={
-                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
-                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
-                            'start="<root.message@cxf.apache.org>"; '
-                            'start-info="application/soap+xml";charset=UTF-8'
-                        },
-                        content=open(
-                            "samples/retrievedocument-resp_eicar_zip", "rb"
-                        ).read(),
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp_eicar_zip", "rb")
+                        .read()
+                        .replace(b"\n--", b"\r\n--")
+                        .replace(b"\nContent", b"\r\nContent")
+                        .replace(b"\n\n", b"\r\n\r\n"),
                     )
 
                 if b"RetrieveDocumentSet" in data:
                     return MockResponse(
-                        headers={
-                            "Content-Type": 'multipart/related; type="application/xop+xml"; '
-                            'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
-                            'start="<root.message@cxf.apache.org>"; '
-                            'start-info="application/soap+xml";charset=UTF-8'
-                        },
+                        headers=headers,
                         content=open("samples/retrievedocument-resp", "rb").read(),
                     )
 
@@ -179,7 +166,7 @@ def test_clam_av(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1][re.search(b"(\r?\n){2}", parts[1]).end() :])
+    xml = ET.fromstring(parts[1][re.search(b"(\r\n){2}", parts[1]).end() :])
 
     assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
@@ -193,6 +180,7 @@ def test_virus_removed(client, clamav):
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
+        .replace(b"\n", b"\r\n")
         .replace(
             b"<DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>",
             b"<DocumentUniqueId>GET_EICAR</DocumentUniqueId>",
@@ -206,7 +194,7 @@ def test_virus_removed(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1][re.search(b"(\r?\n){2}?", parts[1]).end() :])
+    xml = ET.fromstring(parts[1][re.search(b"(\r\n){2}?", parts[1]).end() :])
 
     assert len(parts) == 5  # n+2
     assert clamav.has_been_called()
@@ -229,6 +217,7 @@ def test_virus_replaced(client, clamav):
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
+        .replace(b"\n", b"\r\n")
         .replace(
             b"<DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>",
             b"<DocumentUniqueId>GET_EICAR</DocumentUniqueId>",
@@ -242,7 +231,7 @@ def test_virus_replaced(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
@@ -264,6 +253,7 @@ def test_virus_replaced_mimetype(client, clamav):
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
+        .replace(b"\n", b"\r\n")
         .replace(
             b"<DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>",
             b"<DocumentUniqueId>GET_EICAR_MIME</DocumentUniqueId>",
@@ -277,7 +267,7 @@ def test_virus_replaced_mimetype(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 6  # n+2
     assert clamav.has_been_called()
@@ -298,6 +288,7 @@ def test_virus_replaced_zip(client):
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
+        .replace(b"\n", b"\r\n")
         .replace(
             b"<DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>",
             b"<DocumentUniqueId>ZIP_EICAR</DocumentUniqueId>",
@@ -311,7 +302,7 @@ def test_virus_replaced_zip(client):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 6  # n+2
     # assert clamav.has_been_called()
@@ -332,6 +323,7 @@ def test_all_is_virusd(client, clamav):
     data = (
         open("./test/retrieveDocumentSet_req.xml", "rb")
         .read()
+        .replace(b"\n", b"\r\n")
         .replace(
             b"<DocumentUniqueId>2.25.140094387439901233557</DocumentUniqueId>",
             b"<DocumentUniqueId>ALL_EICAR</DocumentUniqueId>",
@@ -345,7 +337,7 @@ def test_all_is_virusd(client, clamav):
     )
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\n\n")[1])
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 3  # n+2
     rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
@@ -364,8 +356,8 @@ def test_all_is_virusd(client, clamav):
 def test_handle_multipart_request(client, clamav):
     "check handling of requests with multipart"
 
-    data = (
-        b"""Content-Type: multipart/related; type="application/xop+xml"; boundary="uuid:999"; start="<root.message@cxf.apache.org>"; start-info="application/soap+xml";charset=UTF-8
+    data = b"""
+Content-Type: multipart/related; type="application/xop+xml"; boundary="uuid:999"; start="<root.message@cxf.apache.org>"; start-info="application/soap+xml";charset=UTF-8
 Transfer-Encoding: chunked
 Connection: keep-alive
 
@@ -375,10 +367,10 @@ Content-Type: application/xop+xml; charset=UTF-8; type="application/soap+xml"
 Content-Transfer-Encoding: binary
 Content-ID: <root.message@cxf.apache.org>
 
-""".replace(
-            b"\n", b"\r\n"
-        )
-        + open("./test/retrieveDocumentSet_req.xml", "rb").read()
+""" + open(
+        "./test/retrieveDocumentSet_req.xml", "rb"
+    ).read().replace(
+        b"\n", b"\r\n"
     )
 
     res = client.post(
