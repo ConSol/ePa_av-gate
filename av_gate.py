@@ -17,8 +17,9 @@ import lxml.etree as ET
 import requests
 import urllib3
 from flask import Flask, Response, abort, request
+from email.parser import BytesParser
 
-__version__ = "0.19"
+__version__ = "0.20"
 
 ALL_METHODS = [
     "GET",
@@ -199,10 +200,11 @@ def run_antivirus(res: requests.Response):
         bytes(f"Content-Type: {res.headers['Content-Type']}\r\n\r\n\r\n", "ascii")
         + res.content
     )
-    msg: EmailMessage = email.parser.BytesParser(
-        policy=email.policy.default
-    ).parsebytes(body)
-    soap_part: EmailMessage = next(msg.iter_parts())  # type: ignore
+    msg = cast(
+        EmailMessage,
+        email.parser.BytesParser(policy=email.policy.default).parsebytes(body),
+    )
+    soap_part = cast(EmailMessage, next(msg.iter_parts()))
     xml = ET.fromstring(soap_part.get_payload())
     response_xml = xml.find("{*}Body/{*}RetrieveDocumentSetResponse")
 
@@ -238,7 +240,7 @@ def run_antivirus(res: requests.Response):
 
         logging.debug(f"content_ids: {list(xml_documents.keys())}")
 
-        attachments: List[EmailMessage] = list(msg.iter_attachments())  # type: ignore
+        attachments = cast(List[EmailMessage], list(msg.iter_attachments()))
         msg.set_payload([soap_part])
         for att in attachments:
             handle_attachment(
@@ -364,7 +366,7 @@ def build_payload(msg: EmailMessage, virus_atts: List[str], res: requests.Respon
     "create payload based on original response with replacing only payoad for virus_atts"
 
     content_type = res.headers["Content-Type"]
-    m = re.search('boundary="(.*?)"', content_type)
+    m = re.search('boundary="(.*?)"', content_type, re.I)
     assert m
     boundary = b"\r\n--" + bytes(m[1], "ascii")
 
@@ -376,12 +378,24 @@ def build_payload(msg: EmailMessage, virus_atts: List[str], res: requests.Respon
             or content_id == "root.message"
             and REMOVE_MALICIOUS
         ):
-            att = next(
-                (a for a in msg.iter_parts() if content_id in a.get("Content-ID")), None
+            att = cast(
+                EmailMessage,
+                next(
+                    (
+                        a
+                        for a in msg.iter_parts()
+                        if content_id == extract_id(a.get("Content-ID", ""))
+                    ),
+                    None,
+                ),
             )
             if att:
-                content = att.get_content()  # type: ignore
+                content = att.get_content()
                 payload.append(part.split(b"\r\n\r\n")[0] + b"\r\n\r\n" + content)
+            else:
+                logging.error(
+                    f"Content-ID not present: {content_id} in {next(msg.iter_parts()).items()}"
+                )
 
         else:
             payload.append(part)
@@ -390,7 +404,7 @@ def build_payload(msg: EmailMessage, virus_atts: List[str], res: requests.Respon
 
 
 def get_content_id(content: bytes):
-    m = re.search(b"\r\nContent-ID: (.*?)\r\n", content)  # type: ignore
+    m = re.search(b"\r\nContent-ID: (.*?)\r\n", content, re.I)
     if m:
         return extract_id(m[1].decode("ascii"))
 
