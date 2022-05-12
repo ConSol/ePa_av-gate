@@ -19,7 +19,7 @@ import urllib3
 from flask import Flask, Response, abort, request
 from email.parser import BytesParser
 
-__version__ = "0.20"
+__version__ = "0.21 TEST"
 
 ALL_METHODS = [
     "GET",
@@ -300,8 +300,9 @@ def get_malicious_content_ids(msg):
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
         content_id = extract_id(att["Content-ID"])
-        if scan_res[0] != "OK":
-            # if att.get_content().startswith(b"%PDF"): # for manuel testing:
+        isPNG = att.get_content().startswith(bytearray.fromhex('89504E470D0A1A0A')) # PNG file signature
+        isPDF = att.get_content().startswith(bytearray.fromhex('25504446')) # PDF file signature
+        if scan_res[0] != "OK" or isPNG:
             logging.info(f"virus found {content_id} : {scan_res}")
             yield content_id
         else:
