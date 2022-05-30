@@ -19,7 +19,7 @@ Macros in Excel und Word-Dokumenten sind für die zugelassenen Dateitypen (.xlsx
 
 ![architektur](docs/architektur.png)
 
-Das AV-Gate fungiert als Man-in-the-middle zwischen Primärsystem und Konnektor. Die Verbindungen zwischen Primärsystem und NGINX sowie zwischen AV-Gate und Konnektor sind TLS gesichert. Die Requests an den Konnektor sind technisch komplett getrennt von den Requests an das AV-Gate (bzw. dem NGINX).
+Das AV-Gate fungiert als Proxy zwischen Primärsystem und Konnektor. Die Verbindungen zwischen Primärsystem und NGINX sowie zwischen AV-Gate und Konnektor sind TLS gesichert. Die Requests an den Konnektor sind technisch komplett getrennt von den Requests an das AV-Gate (bzw. dem NGINX).
 
 Die Autorisierung für den Konnektor wird bei Basic-Auth aus dem ursprünglichen Request übernommen. Client-Zertifikate müssen je Konnektor für das AV-Gate gesondert konfiguriert werden; eine Übername aus dem Request ist hier nicht möglich.
 
@@ -115,7 +115,7 @@ Für jede Konnektor (jede Gruppe) kann konfiguriert werden:
 Die Zertifikate des Konnektors werden auf Gültigkeit überprüft. Verbindungen mit ungültigen (auch selfsigned) Zertifikaten werden abgelehnt.
 - ssl_cert = <pfad.crt>  
 - ssl_key = <pfad.key>  
-Client-Zertifikat für Autorisierung gegenüber Konnektor.  
+Client-Zertifikat für Autorisierung gegenüber Konnektor. Die Zertifikate können als als .crt oder .pem hinterlegt werden und dürfen nicht verschlüsselt sein.
 
 Auf jeden Arbeitsplatzrechner muss in der Konfiguration der Primärsysteme die IP-Adresse des AV-Gates als Konnektor eingetragen werden.
 
@@ -138,4 +138,4 @@ TODO
 
 Consol GmbH  
 Norbert Ferchen  
-Januar 2022
+Mai 2022

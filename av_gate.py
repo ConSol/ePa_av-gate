@@ -19,7 +19,7 @@ import urllib3
 from flask import Flask, Response, abort, request
 from email.parser import BytesParser
 
-__version__ = "0.21 TEST"
+__version__ = "1.0"
 
 ALL_METHODS = [
     "GET",
@@ -94,13 +94,6 @@ def soap(path):
 
     response = create_response(data, upstream)
 
-    if logging.getLogger().isEnabledFor(logging.DEBUG) and data:
-        t_data = data.decode("utf-8", errors="replace").splitlines(True)
-        t_upstream = upstream.content.decode("utf-8", errors="replace").splitlines(True)
-        diff = "".join(itertools.islice(unified_diff(t_data, t_upstream), 20))
-        if diff:
-            logging.debug(f"Diff found\n{diff}...")
-
     return response
 
 
@@ -110,7 +103,7 @@ def request_upstream(warn=True):
     port = request.host.split(":")[1] if ":" in request.host else "443"
 
     client = f"{request_ip}:{port}"
-    logging.info(f"client {client}")
+    logging.debug(f"client {client}")
 
     if config.has_section(client):
         cfg = config[client]
@@ -256,9 +249,6 @@ def run_antivirus(res: requests.Response):
             del soap_part["MIME-Version"]
 
         payload = build_payload(msg, virus_atts, res)
-
-        logging.info("creating new body")
-        logging.debug(body[:CONTENT_MAX])
 
         return payload
 
