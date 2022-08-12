@@ -35,6 +35,9 @@ ALL_METHODS = [
 
 reg_retrieve_document = re.compile(":RetrieveDocumentSetRequest</Action>")
 
+# Service Path for PHRService will be set from response to connector.sds
+phr_service_path = "unknown"
+
 # to prevent flooding log
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -68,12 +71,20 @@ def connector_sds():
     upstream = request_upstream(warn=False)
 
     xml = ET.fromstring(upstream.content)
+
+    if config["config"].get("tunnel_all_services", False):
+        for e in xml.findall("{*}ServiceInformation/{*}Service[@Name!='PHRService']//{*}EndpointTLS"):
+            previous_url = urlparse(e.attrib["Location"])
+            e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
+
     e = xml.find("{*}ServiceInformation/{*}Service[@Name='PHRService']//{*}EndpointTLS")
     if e is None:
         KeyError("connector.sds does not contain PHRService location.")
 
     previous_url = urlparse(e.attrib["Location"])
     e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
+    global phr_service_path
+    phr_service_path = previous_url.path
 
     return create_response(ET.tostring(xml), upstream)
 
@@ -82,6 +93,10 @@ def connector_sds():
 def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     upstream = request_upstream()
+
+    if request.path != phr_service_path:
+        return create_response(upstream.content, upstream)
+
     data = run_antivirus(upstream)
 
     if not data:
