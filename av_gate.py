@@ -72,7 +72,7 @@ def connector_sds():
 
     xml = ET.fromstring(upstream.content)
 
-    if config["config"].get("tunnel_all_services", False):
+    if config["config"].get("proxy_all_services", False):
         for e in xml.findall("{*}ServiceInformation/{*}Service[@Name!='PHRService']//{*}EndpointTLS"):
             previous_url = urlparse(e.attrib["Location"])
             e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
