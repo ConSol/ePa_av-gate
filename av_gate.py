@@ -19,7 +19,7 @@ import urllib3
 from flask import Flask, Response, abort, request
 from email.parser import BytesParser
 
-__version__ = "1.1"
+__version__ = "1.2"
 
 ALL_METHODS = [
     "GET",
