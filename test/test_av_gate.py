@@ -10,9 +10,9 @@ import requests
 
 av_gate.config.read_dict(
     {
-        "config": {"remove_malicious": True},
+        "config": {"remove_malicious": "true"},
         "*:400": {"konnektor": "some"},
-        "8.8.8.8:401": {"konnektor": "some"},
+        "8.8.8.8:401": {"konnektor": "some", "proxy_all_services": "true"},
     }
 )
 
@@ -154,6 +154,26 @@ def test_connector_sds(client):
         == "https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0"
     )
     assert data["PHRService"] == "https://7.7.7.7:400/soap-api/PHRService/1.3.0"
+    assert data["PHRManagementService"] == "https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0"
+
+
+def test_proxy_all_service(client):
+    "check all endpoints are replaced"
+
+    res = client.get(
+        "/connector.sds", headers={"X-real-ip": "8.8.8.8", "Host": "7.7.7.7:401"}
+    )
+    xml = ET.fromstring(res.data)
+    data = {
+        e.attrib["Name"]: e.find("**/{*}EndpointTLS").attrib["Location"]
+        for e in xml.findall("{*}ServiceInformation/{*}Service")
+    }
+    assert any(
+        [
+            x.startswith("https://7.7.7.7:401/soap-api/")
+            for x in data.values()
+        ]
+    )
 
 
 def test_clam_av(client, clamav):
