@@ -6,9 +6,11 @@ import io
 import itertools
 import logging
 import os
+from pyclbr import Function
 import re
 from difflib import unified_diff
 from email.message import EmailMessage
+import types
 from typing import List, cast
 from urllib.parse import unquote, urlparse
 
@@ -16,7 +18,7 @@ import clamd  # type: ignore
 import lxml.etree as ET
 import requests
 import urllib3
-from flask import Flask, Response, abort, request
+from flask import Flask, Response, abort, request, stream_with_context
 from email.parser import BytesParser
 
 __version__ = "1.2"
@@ -60,6 +62,8 @@ clamav: clamd.ClamdUnixSocket = clamd.ClamdUnixSocket(
 
 CONTENT_MAX = config["config"].getint("content_max", 800)
 REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
+ALL_PNG_MALICIOUS = config["config"].getboolean("all_png_malicious", False)
+ALL_PDF_MALICIOUS = config["config"].getboolean("all_pdf_malicious", False)
 
 
 @app.route("/connector.sds", methods=["GET"])
@@ -69,49 +73,59 @@ def connector_sds():
     # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRService/1.3.0"/>
 
     client_config = get_client_config()
-    upstream = request_upstream(client_config, warn=False)
+    with request_upstream(client_config, warn=False) as upstream:
+        xml = ET.fromstring(upstream.content)
 
-    xml = ET.fromstring(upstream.content)
+        if client_config.getboolean("proxy_all_services", False):
+            for e in xml.findall("{*}ServiceInformation/{*}Service//{*}EndpointTLS"):
+                previous_url = urlparse(e.attrib["Location"])
+                e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
 
-    if client_config.getboolean("proxy_all_services", False):
-        for e in xml.findall("{*}ServiceInformation/{*}Service//{*}EndpointTLS"):
-            previous_url = urlparse(e.attrib["Location"])
-            e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
+        e = xml.find("{*}ServiceInformation/{*}Service[@Name='PHRService']//{*}EndpointTLS")
+        if e is None:
+            KeyError("connector.sds does not contain PHRService location.")
 
-    e = xml.find("{*}ServiceInformation/{*}Service[@Name='PHRService']//{*}EndpointTLS")
-    if e is None:
-        KeyError("connector.sds does not contain PHRService location.")
+        previous_url = urlparse(e.attrib["Location"])
+        e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
+        global phr_service_path
+        phr_service_path = previous_url.path
 
-    previous_url = urlparse(e.attrib["Location"])
-    e.attrib["Location"] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
-    global phr_service_path
-    phr_service_path = previous_url.path
-
-    return create_response(ET.tostring(xml), upstream)
+        return create_response(ET.tostring(xml), upstream)
 
 
-@app.route("/<path:path>", methods=ALL_METHODS)
+@app.route("/soap-api/PHRService/<path:path>", methods=ALL_METHODS)
 def soap(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     client_config = get_client_config()
-    upstream = request_upstream(client_config)
+    with request_upstream(client_config) as upstream:
+        data = run_antivirus(upstream)
 
-    data = run_antivirus(upstream)
+        if not data:
+            logging.info("no new body, copying content from konnektor")
+            data = upstream.content
 
-    if not data:
-        logging.info("no new body, copying content from konnektor")
-        data = upstream.content
+        assert (
+            b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
+        ), "found EICAR signature"
 
-    assert (
-        b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
-    ), "found EICAR signature"
+        response = create_response(data, upstream)
 
-    response = create_response(data, upstream)
+        return response
 
+@app.route("/<path:path>", methods=ALL_METHODS)
+def other(path):
+    """Streamed forward without scan"""
+    client_config = get_client_config()
+    upstream = request_upstream(client_config, stream=True)
+    def generate():
+        for data in upstream.iter_content():
+            yield data
+        upstream.close()
+    response = create_response(generate, upstream)
     return response
 
 
-def request_upstream(client_config, warn=True):
+def request_upstream(client_config, warn=True, stream=False):
     """Request to real Konnektor"""
 
     konn = client_config["Konnektor"]
@@ -138,9 +152,10 @@ def request_upstream(client_config, warn=True):
             data=data,
             cert=cert,
             verify=verify,
+            stream=stream
         )
 
-        if warn and bytes(konn, "ascii") in response.content:
+        if warn and not stream and bytes(konn, "ascii") in response.content:
             logging.warning(
                 f"Found Konnektor Address in response: {konn} - {request.path}"
             )
@@ -185,14 +200,24 @@ def create_response(data, upstream: Response) -> Response:
         )
     }
 
-    response = Response(
-        response=data,
-        status=upstream.status_code,
-        headers=headers,
-        mimetype=upstream.headers.get("Mimetype"),
-        content_type=upstream.headers.get("Content-Type"),
-        direct_passthrough=True,
-    )
+    if type(data) is types.FunctionType:
+        response = Response(
+            stream_with_context(data()),
+            status=upstream.status_code,
+            headers=headers,
+            mimetype=upstream.headers.get("Mimetype"),
+            content_type=upstream.headers.get("Content-Type"),
+            direct_passthrough=True,
+        )
+    else:
+        response = Response(
+            response=data,
+            status=upstream.status_code,
+            headers=headers,
+            mimetype=upstream.headers.get("Mimetype"),
+            content_type=upstream.headers.get("Content-Type"),
+            direct_passthrough=True,
+        )
 
     return response
 
@@ -306,9 +331,14 @@ def get_malicious_content_ids(msg):
     for att in msg.iter_attachments():
         scan_res = clamav.instream(io.BytesIO(att.get_content()))["stream"]
         content_id = extract_id(att["Content-ID"])
-        isPNG = att.get_content().startswith(bytearray.fromhex('89504E470D0A1A0A')) # PNG file signature
-        isPDF = att.get_content().startswith(bytearray.fromhex('25504446')) # PDF file signature
-        if scan_res[0] != "OK" or isPNG:
+
+        test_malicous = False
+        if ALL_PNG_MALICIOUS and att.get_content().startswith(bytearray.fromhex('89504E470D0A1A0A')):
+            test_malicous = True
+        if ALL_PDF_MALICIOUS and att.get_content().startswith(bytearray.fromhex('25504446')):
+            test_malicous = True
+
+        if scan_res[0] != "OK" or test_malicous:
             logging.info(f"virus found {content_id} : {scan_res}")
             yield content_id
         else:

@@ -40,6 +40,10 @@ def client(monkeypatch):
 
                 def __init__(self, **kwargs):
                     self.__dict__.update(kwargs)
+                def __enter__(self):
+                    return self
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    pass
 
             def mock_request(url: str, data: bytes, *args, **kwargs):
 
@@ -208,7 +212,7 @@ def test_virus_removed(client, clamav):
     )
 
     res = client.post(
-        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        "/soap-api/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -245,7 +249,7 @@ def test_virus_replaced(client, clamav):
     )
 
     res = client.post(
-        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        "/soap-api/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -281,7 +285,7 @@ def test_virus_replaced_mimetype(client, clamav):
     )
 
     res = client.post(
-        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        "/soap-api/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -316,7 +320,7 @@ def test_virus_replaced_zip(client):
     )
 
     res = client.post(
-        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        "/soap-api/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -351,7 +355,7 @@ def test_all_is_virusd(client, clamav):
     )
 
     res = client.post(
-        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        "/soap-api/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -394,7 +398,7 @@ Content-ID: <root.message@cxf.apache.org>
     )
 
     res = client.post(
-        "/https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        "/soap-api/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
