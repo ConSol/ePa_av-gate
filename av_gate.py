@@ -21,7 +21,7 @@ import urllib3
 from flask import Flask, Response, abort, request, stream_with_context
 from email.parser import BytesParser
 
-__version__ = "1.2"
+__version__ = "1.3"
 
 ALL_METHODS = [
     "GET",
