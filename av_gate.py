@@ -92,9 +92,16 @@ def connector_sds():
 
         return create_response(ET.tostring(xml), upstream)
 
+@app.route("/<path:path>", methods=ALL_METHODS)
+def switch(path):
+    """Entrypoint with filter for PHRService"""
+    if "PHRService" in path:
+        return phr_service(path)
+    else:
+        return other(path)
 
-@app.route("/soap-api/PHRService/<path:path>", methods=ALL_METHODS)
-def soap(path):
+
+def phr_service(path):
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     client_config = get_client_config()
     with request_upstream(client_config) as upstream:
@@ -112,7 +119,6 @@ def soap(path):
 
         return response
 
-@app.route("/<path:path>", methods=ALL_METHODS)
 def other(path):
     """Streamed forward without scan"""
     client_config = get_client_config()
