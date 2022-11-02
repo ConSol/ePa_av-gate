@@ -81,7 +81,7 @@ Es werden benötigt:
 - Python 3.8 
 - uWSGI 1.19 
 - NGINX 1.18.0
-- ClamAV 0.103.2
+- ClamAV 0.105
 
 Bislang wurde als Host-System Ubuntu Server 20.04.3 LTS verwendet. Die oben genanten Versionen entsprechen dieser Konfiguration. 
 
