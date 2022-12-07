@@ -60,6 +60,7 @@ Der Ersatz der schadhaften Dokumente erfolgt mit den jeweiligen Dateien aus dem 
 - application/hl7-v3
 - application/pkcs7-mime
 - application/fhir+xml
+
 ### Office Dokumente
 - application/vnd.openxmlformats-officedocument.wordprocessingml.document (.docx)
 - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet (.xlsx)
@@ -103,6 +104,7 @@ Beispieldatei `uwsgi.ini` liegt bei. Socket und chdir müssen angepasst werden. 
 Dateien av_gate.py, av_gate.ini, requirements.txt in ein Programmverzeichnis kopieren (z.B. /usr/local/av_gate/). 
 `sh> pip3 install -r requirements.txt` - oder mit `pip`, wenn pip3 nicht verfügbar.  
 Der Pfad für den Socket in `av_gate.ini` ist ggf anzupassen.
+
 ## Konfiguration
 
 In der `av_gate.ini` ist für jeden Konnektor eine Gruppe anzulegen. Der Gruppenname beschreibt das Routing über IP-Adresse mit Port `[<ip-address>:<port]` - oder aber ausschließlich über den Port `[*:<port>]`. Gruppen mit IP-Adresse werden vor den Gruppen ohne IP-Adressen berücksichtigt.
@@ -132,7 +134,9 @@ TODO
 
 | Primärsystem | Version | Status | Anmerkung |
 |---|---|---|---|
-| | | |
+| Dedalus - Orbis | | voll funktionsfähig | |
+| meatixx - x.concept | | voll funktionsfähig | `proxy_all_services` muss gesetzt sein |
+
 
 --
 
