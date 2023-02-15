@@ -136,7 +136,7 @@ TODO
 |---|---|---|---|
 | Dedalus - Orbis | | voll funktionsfähig | |
 | meatixx - x.concept | | voll funktionsfähig | `proxy_all_services` muss gesetzt sein |
-
+| KIS - iMedOne | | voll funktionsfähig | `proxy_all_services` muss gesetzt sein | 
 
 --
 
