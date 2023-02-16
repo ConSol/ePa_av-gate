@@ -134,9 +134,9 @@ TODO
 
 | Primärsystem | Version | Status | Anmerkung |
 |---|---|---|---|
-| Dedalus - Orbis | | voll funktionsfähig | |
-| meatixx - x.concept | | voll funktionsfähig | `proxy_all_services` muss gesetzt sein |
-| KIS - iMedOne | | voll funktionsfähig | `proxy_all_services` muss gesetzt sein | 
+| Dedalus - Orbis | | voll funktionsfähig | `proxy_all_services` muss gesetzt sein |
+| medatixx - x.concept | | voll funktionsfähig |  |
+| KIS - iMedOne | | voll funktionsfähig | `proxy_all_services` muss gesetzt sein |
 
 --
 
