@@ -1,30 +1,16 @@
 
-FROM ubuntu:latest
+FROM python:3.10
 
-# Timezone is needed for installing uwsgi
-ENV TZ=Europe/Berlin
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+WORKDIR /code
 
-RUN apt-get -y update \
-&& apt-get -y install nginx uwsgi uwsgi-plugin-python3 python3 python3-pip clamav clamav-daemon 
+COPY cert/* /code/cert/
+COPY replacements/* /code/replacements/
 
-# remove config for group on socket clamd    
-RUN sed -i '/^LocalSocketGroup .*$/d' /etc/clamav/clamd.conf
+COPY av_gate.py requirements.txt /code/
+COPY docker/av_gate.ini /code/
+RUN pip install --no-cache-dir uvicorn
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
-COPY cert/* /app/cert/
-COPY replacements/* /app/replacements/
-COPY docker/startup.sh /bin/
-COPY docker/nginx.conf /etc/nginx/conf.d/av_gate.conf
-COPY docker/uwsgi.ini /etc/uwsgi/apps-enabled/av_gate.ini
-# copy initial clamav signatures to avoid cooldown
-COPY docker/clamav/* /var/lib/clamav
+CMD ["uvicorn", "av_gate:app", "--host 0.0.0.0:443", "--port", "443"]
 
-COPY av_gate.py requirements.txt /app/
-COPY docker/av_gate.ini /app/
-RUN pip3 install -r /app/requirements.txt
-
-ENTRYPOINT "/bin/startup.sh"
-
-# expose not possible for ranges
-EXPOSE 8400
-EXPOSE 8401
+EXPOSE 443
