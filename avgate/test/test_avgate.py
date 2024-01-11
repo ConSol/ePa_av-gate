@@ -1,15 +1,13 @@
-import io
 import re
 from unittest import mock
 import xml.etree.ElementTree as ET
 from unittest.mock import Mock
-from fastapi.testclient import TestClient
 
-from avgate import main
+from avgate import avgate
 import pytest
 import requests
 
-main.config.read_dict(
+avgate.config.read_dict(
     {
         "config": {
             "remove_malicious": "true",
@@ -20,104 +18,109 @@ main.config.read_dict(
     }
 )
 
-client = TestClient(main.app)
+avgate.scan_file = avgate.get_file_scanner()
 
 @pytest.fixture
-def mock_response(monkeypatch):
-    main.config.update({"*:400": {"Konnektor": "https://nowhere.com"}})
+def client(monkeypatch):
+    avgate.config.update({"*:400": {"Konnektor": "https://nowhere.com"}})
 
-    # Mock Requests
-    headers = {
-        "Content-Type": 'multipart/related; type="application/xop+xml"; '
-        'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
-        'start="<root.message@cxf.apache.org>"; '
-        'start-info="application/soap+xml";charset=UTF-8'
-    }
+    with avgate.app.test_client() as client:
+        with avgate.app.app_context():
 
-    class MockResponse:
-        headers = {"Test-Header": "bla"}
-        content = b"""bla bla"""
-        status_code = 200
-        raw = mock.Mock()
-        raw.headers = {"bla": "foo"}
+            # Mock Requests
+            headers = {
+                "Content-Type": 'multipart/related; type="application/xop+xml"; '
+                'boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; '
+                'start="<root.message@cxf.apache.org>"; '
+                'start-info="application/soap+xml";charset=UTF-8'
+            }
 
-        def __init__(self, **kwargs):
-            self.__dict__.update(kwargs)
+            class MockResponse:
+                headers = {"Test-Header": "bla"}
+                content = b"""bla bla"""
+                status_code = 200
+                raw = mock.Mock()
+                raw.headers = {"bla": "foo"}
 
-        def __enter__(self):
-            return self
+                def __init__(self, **kwargs):
+                    self.__dict__.update(kwargs)
 
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            pass
+                def __enter__(self):
+                    return self
 
-    def mock_request(url: str, data: bytes, *args, **kwargs):
+                def __exit__(self, exc_type, exc_val, exc_tb):
+                    pass
 
-        if url.endswith("connector.sds"):
-            return MockResponse(
-                content=open("samples/connector.sds", "rb")
-                .read()
-                .replace(b"\n", b"\r\n")
-            )
+            def mock_request(url: str, data: bytes, *args, **kwargs):
 
-        if b"GET_EICAR_MIME" in data:
-            return MockResponse(
-                headers=headers,
-                content=open("samples/retrievedocument-resp_eicar", "rb")
-                .read()
-                .replace(b"\n", b"\r\n")
-                .replace(
-                    b"<ns5:mimeType>application/pdf</ns5:mimeType>",
-                    b"<ns5:mimeType>application/xml</ns5:mimeType>",
-                ),
-            )
+                if url.endswith("connector.sds"):
+                    return MockResponse(
+                        content=open("samples/connector.sds", "rb")
+                        .read()
+                        .replace(b"\n", b"\r\n")
+                    )
 
-        if b"GET_EICAR" in data:
-            return MockResponse(
-                headers=headers,
-                content=open("samples/retrievedocument-resp_eicar", "rb")
-                .read()
-                .replace(b"\n", b"\r\n"),
-            )
+                if b"GET_EICAR_MIME" in data:
+                    return MockResponse(
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp_eicar", "rb")
+                        .read()
+                        .replace(b"\n", b"\r\n")
+                        .replace(
+                            b"<ns5:mimeType>application/pdf</ns5:mimeType>",
+                            b"<ns5:mimeType>application/xml</ns5:mimeType>",
+                        ),
+                    )
 
-        if b"ALL_EICAR" in data:
-            return MockResponse(
-                headers=headers,
-                content=open("samples/retrievedocument-resp_all_eicar", "rb")
-                .read()
-                .replace(b"\n", b"\r\n"),
-            )
+                if b"GET_EICAR" in data:
+                    return MockResponse(
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp_eicar", "rb")
+                        .read()
+                        .replace(b"\n", b"\r\n"),
+                    )
 
-        if b"ZIP_EICAR" in data:
-            return MockResponse(
-                headers=headers,
-                content=open("samples/retrievedocument-resp_eicar_zip", "rb")
-                .read()
-                .replace(b"\n--", b"\r\n--")
-                .replace(b"\nContent", b"\r\nContent")
-                .replace(b"\n\n", b"\r\n\r\n"),
-            )
+                if b"ALL_EICAR" in data:
+                    return MockResponse(
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp_all_eicar", "rb")
+                        .read()
+                        .replace(b"\n", b"\r\n"),
+                    )
 
-        if b"RetrieveDocumentSet" in data:
-            return MockResponse(
-                headers=headers,
-                content=open("samples/retrievedocument-resp", "rb").read(),
-            )
+                if b"ZIP_EICAR" in data:
+                    return MockResponse(
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp_eicar_zip", "rb")
+                        .read()
+                        .replace(b"\n--", b"\r\n--")
+                        .replace(b"\nContent", b"\r\nContent")
+                        .replace(b"\n\n", b"\r\n\r\n"),
+                    )
 
-        return MockResponse()
+                if b"RetrieveDocumentSet" in data:
+                    return MockResponse(
+                        headers=headers,
+                        content=open("samples/retrievedocument-resp", "rb").read(),
+                    )
 
-    monkeypatch.setattr(requests, "request", mock_request)
+                return MockResponse()
+
+            monkeypatch.setattr(requests, "request", mock_request)
+        
+            yield client
 
 
 @pytest.fixture
 def antivir(monkeypatch):
-    "Mock clamd"
-    def mock_antivir(stream: io.BytesIO):
-        if b"EICAR" in stream.read():
+    "Mock antivir"
+    def mock_antivir(data: bytes):
+        if b"EICAR" in data:
             return ("FOUND", "Win.Test.EICAR_HDB-1")
         else:
             return ("OK", None)
 
-    monkeypatch.setattr(main, "scan_file", Mock(side_effect=mock_antivir))
+    monkeypatch.setattr(avgate, "scan_file", Mock(side_effect=mock_antivir))
         
 @pytest.mark.parametrize(
     "real_ip,host,expected",
@@ -128,7 +131,7 @@ def antivir(monkeypatch):
         ("8.8.8.8", "7.7.7.7:402", 503),
     ],
 )
-def test_routing_ip(mock_response, real_ip, host, expected):
+def test_routing_ip(client, real_ip, host, expected):
     "check config pick by ip and port"
 
     res = client.get(
@@ -139,7 +142,7 @@ def test_routing_ip(mock_response, real_ip, host, expected):
     assert res.status_code == expected
 
 
-def test_connector_sds(mock_response):
+def test_connector_sds(client):
     "check endpoint is replaced"
 
     res = client.get(
@@ -180,13 +183,13 @@ def test_connector_sds(mock_response):
     )
 
 
-def test_proxy_all_service(mock_response):
+def test_proxy_all_service(client):
     "check all endpoints are replaced"
 
     res = client.get(
         "/connector.sds", headers={"X-real-ip": "8.8.8.8", "Host": "7.7.7.7:401"}
     )
-    xml = ET.fromstring(res.content)
+    xml = ET.fromstring(res.data)
     data = (
         e.attrib["Location"]
         for e in xml.findall(
@@ -197,29 +200,29 @@ def test_proxy_all_service(mock_response):
     assert any([x.startswith("https://7.7.7.7:401/soap-api/") for x in data])
 
 
-def test_clam_av(mock_response, clamav):
+def test_clam_av(client, antivir):
     "check clam_av is called"
 
     res = client.post(
         "https://7.7.7.7:400/soap-api/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
-        data=open("./test/retrieveDocumentSet_req.xml", "rb").read(),
+        data=open("avgate/test/retrieveDocumentSet_req.xml", "rb").read(),
     )
 
-    parts = res.content.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     assert len(parts) == 6  # n+2
     
     xml = ET.fromstring(parts[1][re.search(b"(\r\n){2}", parts[1]).end() :])
-    assert clamav.has_been_called()
+    assert avgate.scan_file.has_been_called()
 
 
-def test_virus_removed(mock_response, antivir):
+def test_virus_removed(client, antivir):
     "check virus is removed"
 
-    main.REMOVE_MALICIOUS = True
+    avgate.REMOVE_MALICIOUS = True
 
     data = (
-        open("./test/retrieveDocumentSet_req.xml", "rb")
+        open("avgate/test/retrieveDocumentSet_req.xml", "rb")
         .read()
         .replace(b"\n", b"\r\n")
         .replace(
@@ -234,11 +237,11 @@ def test_virus_removed(mock_response, antivir):
         data=data,
     )
 
-    parts = res.content.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     assert len(parts) == 5  # n+2
 
     xml = ET.fromstring(parts[1][re.search(b"(\r\n){2}?", parts[1]).end() :])
-    assert main.scan_file.has_been_called()
+    assert avgate.scan_file.has_been_called()
     rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
     assert (
         rres is not None
@@ -250,13 +253,13 @@ def test_virus_removed(mock_response, antivir):
     )
 
 
-def test_virus_replaced(mock_response, clamav):
+def test_virus_replaced(client, antivir):
     "check virus is removed"
 
-    main.REMOVE_MALICIOUS = False
+    avgate.REMOVE_MALICIOUS = False
 
     data = (
-        open("./test/retrieveDocumentSet_req.xml", "rb")
+        open("avgate/test/retrieveDocumentSet_req.xml", "rb")
         .read()
         .replace(b"\n", b"\r\n")
         .replace(
@@ -271,11 +274,11 @@ def test_virus_replaced(mock_response, clamav):
         data=data,
     )
 
-    parts = res.content.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 6  # n+2
-    assert clamav.has_been_called()
+    assert avgate.scan_file.has_been_called()
     rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
     assert (
         rres is not None
@@ -286,13 +289,13 @@ def test_virus_replaced(mock_response, clamav):
     assert b'<?xml version="1.0" encoding="UTF-8"?>' in parts[3]
 
 
-def test_virus_replaced_mimetypee(mock_response, clamav):
+def test_virus_replaced_mimetypee(client, antivir):
     "check virus is replaced with same mimetype"
 
-    main.REMOVE_MALICIOUS = False
+    avgate.REMOVE_MALICIOUS = False
 
     data = (
-        open("./test/retrieveDocumentSet_req.xml", "rb")
+        open("avgate/test/retrieveDocumentSet_req.xml", "rb")
         .read()
         .replace(b"\n", b"\r\n")
         .replace(
@@ -307,11 +310,11 @@ def test_virus_replaced_mimetypee(mock_response, clamav):
         data=data,
     )
 
-    parts = res.content.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 6  # n+2
-    assert clamav.has_been_called()
+    assert avgate.scan_file.has_been_called()
     rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
     assert (
         rres is not None
@@ -321,13 +324,13 @@ def test_virus_replaced_mimetypee(mock_response, clamav):
     assert b"potentiell schadhafter Code" in parts[3]
 
 
-def test_virus_replaced_zip(mock_response):
-    "check virus is replaced on real zip - needs clamav running"
+def test_virus_replaced_zip(client):
+    "check virus is replaced on real zip - needs antivir running"
 
-    main.REMOVE_MALICIOUS = False
+    avgate.REMOVE_MALICIOUS = False
 
     data = (
-        open("./test/retrieveDocumentSet_req.xml", "rb")
+        open("avgate/test/retrieveDocumentSet_req.xml", "rb")
         .read()
         .replace(b"\n", b"\r\n")
         .replace(
@@ -342,11 +345,10 @@ def test_virus_replaced_zip(mock_response):
         data=data,
     )
 
-    parts = res.content.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
-    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
-
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     assert len(parts) == 6  # n+2
-    # assert clamav.has_been_called()
+
+    xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
     rres = xml.find("*//{*}RetrieveDocumentSetResponse/{*}RegistryResponse")
     assert (
         rres is not None
@@ -356,13 +358,13 @@ def test_virus_replaced_zip(mock_response):
     assert b"potentiell schadhafter Code" in parts[3]
 
 
-def test_all_is_virusd(mock_response, clamav):
+def test_all_is_virusd(client, antivir):
     "check different error message if all msg are malicious"
 
-    main.REMOVE_MALICIOUS = True
+    avgate.REMOVE_MALICIOUS = True
 
     data = (
-        open("./test/retrieveDocumentSet_req.xml", "rb")
+        open("avgate/test/retrieveDocumentSet_req.xml", "rb")
         .read()
         .replace(b"\n", b"\r\n")
         .replace(
@@ -377,7 +379,7 @@ def test_all_is_virusd(mock_response, clamav):
         data=data,
     )
 
-    parts = res.content.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
+    parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     xml = ET.fromstring(parts[1].split(b"\r\n\r\n")[1])
 
     assert len(parts) == 3  # n+2
@@ -394,7 +396,7 @@ def test_all_is_virusd(mock_response, clamav):
     )
 
 
-def test_handle_multipart_request(mock_response, clamav):
+def test_handle_multipart_request(client, antivir):
     "check handling of requests with multipart"
 
     data = b"""
@@ -409,7 +411,7 @@ Content-Transfer-Encoding: binary
 Content-ID: <root.message@cxf.apache.org>
 
 """ + open(
-        "./test/retrieveDocumentSet_req.xml", "rb"
+        "avgate/test/retrieveDocumentSet_req.xml", "rb"
     ).read().replace(
         b"\n", b"\r\n"
     )
@@ -434,4 +436,4 @@ Content-ID: <root.message@cxf.apache.org>
     ],
 )
 def test_extract_id(in_id, out_id):
-    assert main.extract_id(in_id) == out_id
+    assert avgate.extract_id(in_id) == out_id

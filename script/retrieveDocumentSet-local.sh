@@ -1,7 +1,6 @@
 #! /bin/bash
-curl -v --location --request POST 'http://127.0.0.1:5001/soap-api/PHRService/1.3.0' \
+curl -v --location --request POST 'https://127.0.0.1:443/soap-api/PHRService/1.3.0' \
 --header 'Content-Type: application/xml' \
---header 'X-real-ip: 127.0.0.1:84001' \
 --insecure \
 --data-raw '<?xml version="1.0" encoding="UTF-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:m0="http://ws.gematik.de/conn/ConnectorContext/v2.0" xmlns:m1="http://ws.gematik.de/conn/ConnectorCommon/v5.0" xmlns:m2="http://ws.gematik.de/fa/phr/v1.1">

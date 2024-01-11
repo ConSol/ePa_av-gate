@@ -11,8 +11,9 @@ def root():
 
 @app.route("/soap-api/PHRService/1.3.0", methods=["POST", "GET"])
 def soap():
-    fn = open("./konnektor_mock/samples/retrievedocument-resp_eicar", "br")
-    b = io.BytesIO(fn.read())
+    fn = open("./samples/retrievedocument-resp_eicar", "br")
+    b = io.BytesIO(fn.read().replace(b"\n", b"\r\n"))
+
     response = send_file(b, mimetype="application/xop+xml; type='application/soap+xml'", as_attachment=False)
     response.headers.set("Content-Transfer-Encoding", "binary")
     response.headers.set("X-Content-Type-Options", "nosniff")
@@ -34,4 +35,4 @@ def soap():
 
 
 if __name__ == "__main__":
-    app.run(port=5001, debug=True, ssl_context='adhoc')
+    app.run(port=5002, debug=True, ssl_context='adhoc')

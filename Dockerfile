@@ -1,16 +1,21 @@
+FROM ubuntu:latest
 
-FROM python:3.10
+# Timezone is needed for installing uwsgi
+ENV TZ=Europe/Berlin
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-WORKDIR /code
+RUN apt-get -y update \
+&& apt-get -y install net-tools nginx supervisor gettext-base uwsgi uwsgi-plugin-python3 python3 python3-pip
 
-COPY cert/* /code/cert/
-COPY replacements/* /code/replacements/
+COPY requirements.txt log_conf.yaml /app/
+RUN pip3 install -r /app/requirements.txt
 
-COPY av_gate.py requirements.txt /code/
-COPY docker/av_gate.ini /code/
-RUN pip install --no-cache-dir uvicorn
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+COPY avgate/avgate.py /app/avgate/
+COPY avgate/replacements/ /app/avgate/replacements/
+COPY cert/ /app/cert/
+COPY docker/ /app/
 
-CMD ["uvicorn", "av_gate:app", "--host 0.0.0.0:443", "--port", "443"]
+RUN chmod u+x /app/startup.sh
+ENTRYPOINT ["/app/startup.sh"]
 
 EXPOSE 443

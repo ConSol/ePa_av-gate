@@ -8,8 +8,9 @@
       "name": "AV-Gate",
       "type": "python",
       "request": "launch",
-      "module": "uvicorn",
-      "args": ["avgate.main:app", "--reload", "--log-config=log_conf.yaml"],
+      "module": "flask",
+      "env": {"FLASK_APP": "avgate/avgate.py", "FLASK_DEBUG": "1"},
+      "args": ["run", "--no-debugger", "--no-reload", "--port", "5001"],
       "jinja": true,
       "justMyCode": true
     },
@@ -17,9 +18,11 @@
       "name": "Konnektor Mock",
       "type": "python",
       "request": "launch",
-      "program": "konnektor_mock/main.py",
-      "console": "integratedTerminal",
+      "module": "flask",
+      "env": {"FLASK_APP": "avgate/konnektor_mock.py", "FLASK_DEBUG": "1"},
+      "args": ["run", "--no-debugger", "--no-reload", "--port", "5000", "--cert=adhoc"],
+      "jinja": true,
       "justMyCode": true
-    },
+    }
   ]
 }

@@ -1,9 +1,5 @@
-#!/usr/bin/env bash
-set -e
+#!/bin/bash
 
-echo "Startup Services"
-service clamav-daemon start
-service clamav-freshclam start
-service uwsgi start
-service nginx start
-echo "ready to go"
+envsubst '${ICAP_HOST} ${ICAP_SERVICE} ${KONNEKTOR}' < /app/template/avgate.ini > /app/avgate.ini
+envsubst '${KONNEKTOR}' < /app/template/nginx.conf > /app/nginx.conf
+supervisord -c /app/supervisord.conf
