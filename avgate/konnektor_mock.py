@@ -14,7 +14,32 @@ def soap():
     fn = open("./samples/retrievedocument-resp_eicar", "br")
     b = io.BytesIO(fn.read().replace(b"\n", b"\r\n"))
 
-    response = send_file(b, mimetype="application/xop+xml; type='application/soap+xml'", as_attachment=False)
+    response = send_file(
+        b,
+        mimetype="application/xop+xml; type='application/soap+xml'",
+        as_attachment=False,
+    )
+    apply_headers(response)
+
+    return response
+
+
+@app.route("/connector.sds")
+def connector_sds():
+    fn = open("./samples/connector.sds", "br")
+    b = io.BytesIO(fn.read().replace(b"\n", b"\r\n"))
+
+    response = send_file(
+        b,
+        mimetype="application/xop+xml; type='application/soap+xml'",
+        as_attachment=False,
+    )
+    apply_headers(response)
+
+    return response
+
+
+def apply_headers(response):
     response.headers.set("Content-Transfer-Encoding", "binary")
     response.headers.set("X-Content-Type-Options", "nosniff")
     response.headers.set("X-XSS-Protection", "1; mode=block")
@@ -31,8 +56,7 @@ def soap():
         "Content-Type",
         'multipart/related; type="application/xop+xml"; boundary="uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b"; start="<root.message@cxf.apache.org>"; start-info="application/soap+xml"',
     )
-    return response
 
 
 if __name__ == "__main__":
-    app.run(port=5002, debug=True, ssl_context='adhoc')
+    app.run(port=5002, debug=True, ssl_context="adhoc")
