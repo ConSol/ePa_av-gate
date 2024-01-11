@@ -252,14 +252,13 @@ def get_client_config():
 
     if config.has_section(client):
         return config[client]
+    if config.has_section(f"*:{port}"):
+        return config[f"*:{port}"]
+    if config.has_section("default"):
+        return config["default"]
     else:
-        fallback = f"*:{port}"
-        if not config.has_section(fallback):
-            logger.error(f"Client {client} not found in av_gate.ini")
-            abort(503)
-        else:
-            return config[fallback]
-
+        logger.error(f"Client {client} or default not found in avgate.ini")
+        abort(503)
 
 def create_response(data, upstream: Response) -> Response:
     """Create new response with copying headers from origin response"""

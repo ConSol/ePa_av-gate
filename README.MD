@@ -1,19 +1,15 @@
 # AV-Gate
 
-Proxy für den Antivirus-Scan von Dokumenten zu der elektronischen Patientenakte (ePa). Dieser Proxy wird zwischen dem Konnektor der Gematik und den Primärsystemen geschaltet und überprüft sämtliche Dokumente der ePA vor der Übertragung an die Primärsysteme. 
+Proxy für den Antivirus-Scan von Dokumenten zu der elektronischen Patientenakte (ePa). Dieser Proxy wird zwischen dem Konnektor der Gematik und den Primärsystemen geschaltet und überprüft sämtliche Dokumente der ePA vor der Übertragung an die Primärsysteme.
 
 Bei einem Fund von Malware wird das Dokument aus der Übertragung herausgenommen. Stattdessen wird eine Fehlermeldung für das entsprechende Dokument an das Primärsystem übergeben. Veränderungen an dem Repository der ePA selbst werden nicht vorgenommen.
 
 Alternativ kann das Dokument bei Fund von Maleware durch eine Datei gleichen Types (Mime-Type) ersetzt werden. In diesem Fall wird der Payload des Soap-Responses nicht verändert. Dies ist notwendig, wenn das Primärsystem die Fehlermeldungen nicht verarbeiten kann. Die Ersatz-Dokumente liegen in dem Unterverzeichnis `replacements` und enthalten jweils den Hinweis:
 
 > Das Dokument wurde ersetzt, weil beim originären Dokument potentiell schadhafter Code entdeckt wurde.  
-Das Original wird nicht ausgeliefert. 
+Das Original wird nicht ausgeliefert.
 
-Für den AV-Scan wird die open-source Lösung [ClamAV](https://www.clamav.net/) genutzt. Es erkennt schadhaften Code auch in Anhängen zu PDF, Excel und Word und OpenOffice Dokumenten. Testdateien mit der harmlosen [EICAR](https://www.eicar.org/?page_id=3950) Test-Signatur befinden sich für alle Mime-Typen im Verzeichnis `testfiles`. Nachdem Virenscanner regelmäßig auch bei den EICAR Testfiles aufschreien, wurden die Testfiles und Samples in einem zip-File abgelegt (password ist password).
-
-Alternative AV-Scanner können nicht verwendet werden, da keine andere der bekannten Lösungen über eine programatische Schnittstelle für den Scan verfügt.
-
-Macros in Excel und Word-Dokumenten sind für die zugelassenen Dateitypen (.xlsx .docx) nicht möglich bzw. enthalten. (Die Entsprechenden Dateitypen für Dokumente mit Macro  lauten .xlsm und .docm)
+Für den AV-Scan wird ICAP als Schnittstelle genutzt. Alternativ kann die open-source Lösung [ClamAV](https://www.clamav.net/) genutzt. Es erkennt schadhaften Code auch in Anhängen zu PDF, Excel und Word und OpenOffice Dokumenten. Testdateien mit der harmlosen [EICAR](https://www.eicar.org/?page_id=3950) Test-Signatur befinden sich für alle Mime-Typen im Verzeichnis `testfiles`. Nachdem Virenscanner regelmäßig auch bei den EICAR Testfiles aufschreien, wurden die Testfiles und Samples in einem zip-File abgelegt (password ist password).
 
 ## Architektur und Funktionsweise
 
@@ -50,6 +46,7 @@ Der XOP Teil der Nachricht für die betroffenen Dokumente wird entfernt und eine
 Alternativ wird hier das Dokument ersetzt und der SOAP-Response ansonst nicht verändert.
 
 Der Ersatz der schadhaften Dokumente erfolgt mit den jeweiligen Dateien aus dem Verzeichnis `replacements'. Es sind für folgende Dateitypen/Mime-Typen Dokumente vorhanden:
+
 - application/pdf
 - image/jpeg
 - image/png
@@ -62,6 +59,7 @@ Der Ersatz der schadhaften Dokumente erfolgt mit den jeweiligen Dateien aus dem 
 - application/fhir+xml
 
 ### Office Dokumente
+
 - application/vnd.openxmlformats-officedocument.wordprocessingml.document (.docx)
 - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet (.xlsx)
 - application/vnd.oasis.opendocument.text (.odt)
@@ -71,7 +69,7 @@ Die Office-Dokumente sind in der aktuellen Version von ePA nicht mehr zugelassen
 
 ## ClamAV
 
-Der Virenscanner läuft als Daemon. Die Aktualisierung der Viren-Signaturen erfolgt über einen eigenen Dienst. 
+Der Virenscanner läuft als Daemon. Die Aktualisierung der Viren-Signaturen erfolgt über einen eigenen Dienst.
 
 - [Installation](https://docs.clamav.net/manual/Installing.html)
 - [SignatureManagement](https://docs.clamav.net/manual/Usage/SignatureManagement.html)
@@ -79,40 +77,41 @@ Der Virenscanner läuft als Daemon. Die Aktualisierung der Viren-Signaturen erfo
 ## Installation
 
 Es werden benötigt:
-- Python 3.8 
-- uWSGI 1.19 
-- NGINX 1.18.0
-- ClamAV 0.105
 
-Bislang wurde als Host-System Ubuntu Server 20.04.3 LTS verwendet. Die oben genanten Versionen entsprechen dieser Konfiguration. 
+- Python 3.10
+- uWSGI 2.0.21
+- NGINX 1.25.3
+- ClamAV (optional)
 
-1. ClamAV   
+Bislang wurde als Host-System Ubuntu Server 22.04.3 LTS verwendet. Die oben genanten Versionen entsprechen dieser Konfiguration.
+
+1. ClamAV (nur, wenn nicht ICAP verwendet wird)
 /etc/clamav/clamd.conf  
 `LocalSocket /tmp/clamd.socket`
 
 2. Signaturen laden  
-/etc/clamav/freshclam.conf   
+/etc/clamav/freshclam.conf
 `sh> freshclam`
 
-1. NGINX   
+3. NGINX
 Eine vollständig Beispielkonfiguration `nginx.conf` liegt bei. Ports, SSL-Zertifikate und ggf. Socket müssen angepasst werden. Angaben der Ports als Range sind seit NGINX 1.15.10 möglich.
 
-1. uWSGI   
+4. uWSGI
 Beispieldatei `uwsgi.ini` liegt bei. Socket und chdir müssen angepasst werden. Virtualenv kann weggelassen werden, wenn auf dem Server keine weiteren, anderen Python-Versionen benötigt werden.
 
 5. AV-Gate  
-Dateien av_gate.py, av_gate.ini, requirements.txt in ein Programmverzeichnis kopieren (z.B. /usr/local/av_gate/). 
-`sh> pip3 install -r requirements.txt` - oder mit `pip`, wenn pip3 nicht verfügbar.  
-Der Pfad für den Socket in `av_gate.ini` ist ggf anzupassen.
+Dateien avgate.py, avgate.ini, requirements.txt in ein Programmverzeichnis kopieren (z.B. /usr/local/avgate/).
+`sh> pip3 install -r requirements.txt`
+Der Pfad für den Socket in `avgate.ini` ist ggf. anzupassen.
 
-## Konfiguration
+## Konfiguration ohne Docker
 
-In der `av_gate.ini` ist für jeden Konnektor eine Gruppe anzulegen. Der Gruppenname beschreibt das Routing über IP-Adresse mit Port `[<ip-address>:<port]` - oder aber ausschließlich über den Port `[*:<port>]`. Gruppen mit IP-Adresse werden vor den Gruppen ohne IP-Adressen berücksichtigt.
+In der `avgate.ini` ist für jeden Konnektor eine Gruppe anzulegen. Der Gruppenname beschreibt das Routing über IP-Adresse mit Port `[<ip-address>:<port]` - oder aber ausschließlich über den Port `[*:<port>]`. Gruppen mit IP-Adresse werden vor den Gruppen ohne IP-Adressen berücksichtigt.
 
 > Auf die Verwendung von Namen statt IP-Adressen wurde verzichtet, weil ein Großteil der Primärsysteme keine Namen in der Konfiguration verwenden kann.
 
 Für jede Konnektor (jede Gruppe) kann konfiguriert werden:
-- konnektor = https://<host><port>
+- konnektor = https://<host>
 - ssl_verify = true  
 Die Zertifikate des Konnektors werden auf Gültigkeit überprüft. Verbindungen mit ungültigen (auch selfsigned) Zertifikaten werden abgelehnt.
 - ssl_cert = <pfad.crt>  
@@ -124,13 +123,45 @@ Auf jeden Arbeitsplatzrechner muss in der Konfiguration der Primärsysteme die I
 > **Warnung:** Wird auf einem Arbeitsplatzrechner der Konnektor nicht angepasst, erfolgt kein AV-Scan der Dokumente! Das Primärsystem wird aber dennoch wie bisher auch funktionieren - dies lässt sich technisch auch nicht verhindern.
 
 Das Logging des AV-Gates erfolgt über uWSGI.
-## Docker
 
-Das Dockerfile ist vollständig lauffähig und soll die Installation veranschaulichen. Es es nicht empfehlenswert, das Docker-Image für den produktiven Einsatz zu verwenden, da es aufgrund fehlender Threads sehr ineffizient ist. Die Logs wurden nicht für Docker optimiert.
+## mTLS für AV-Gate
+
+Für die Autorisierung gegenüber dem AV-Gate kann - analog zum Konnektor - mTLS genutzt werden.
+In der nginx.conf innerhalb von 'server':
+
+- ssl_client_certificate <pfad ca-cert>
+- ssl_verify_client on
+
+## Konfiguration Docker
+
+Der Betrieb des AV-Gate zusammen mit nginx in einem Container bietet sich an, wenn ein einzelner Konnektor angesprochen werden soll.
+
+Zum bauen:
+
+`docker build -t avgate .`
+
+Zertifikate:
+
+Die benötigten Zertifikate sind am einfachsten per mount einzubringen. Folgende Zertifikate dazu ins Unterverzeichnis `cert` ablegen:
+
+- kclient.cert & kclient.key - Client-Zertifikate (mTLS) für die Authorisierung gegenüber dem Konnektor
+- server.cert & server.key - TLS Zertifikate für https Verbindung
+- ca-cert.pem - CA Zertifikat für die Prüfung der Client-Zertifikate
+
+Zum Starten:
+
+```sh
+docker run --name avgate -p 443:443  \
+-e ICAP_HOST=<av_server> \
+-e ICAP_SERVICE=<icap://av_server/service> \
+-e KONNEKTOR=https://<konnektor> \
+--mount type=bind,source="$(pwd)"/cert,target=/app/cert,readonly \
+avgate
+```
 
 ## Primärsysteme
+
 Das AV-Gate wurde für folgende Primärsysteme getestet:
-TODO
 
 | Primärsystem | Version | Status | Anmerkung |
 |---|---|---|---|
@@ -142,4 +173,4 @@ TODO
 
 Consol GmbH  
 Norbert Ferchen  
-Mai 2022
+Jan 2024

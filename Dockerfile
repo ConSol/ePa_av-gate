@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM nginx:latest
 
 # Timezone is needed for installing uwsgi
 ENV TZ=Europe/Berlin
@@ -8,7 +8,7 @@ RUN apt-get -y update \
 && apt-get -y install net-tools nginx supervisor gettext-base uwsgi uwsgi-plugin-python3 python3 python3-pip
 
 COPY requirements.txt log_conf.yaml /app/
-RUN pip3 install -r /app/requirements.txt
+RUN pip3 install -r /app/requirements.txt --break-system-packages
 
 COPY avgate/avgate.py /app/avgate/
 COPY avgate/replacements/ /app/avgate/replacements/
