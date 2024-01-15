@@ -42,6 +42,7 @@ config.read("avgate.ini")
 
 logging.getLogger().addHandler(logging.StreamHandler())
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 logger.info(f"avgate {__version__}")
 logger.debug(list(config["config"].items()))
 
@@ -92,8 +93,11 @@ def connector_sds():
 @app.route("/<path:path>", methods=ALL_METHODS)
 def switch(path):
     """Entrypoint with filter for PHRService"""
+    logger.info("start")
     if "PHRService" in path:
-        return phr_service()
+        v = phr_service()
+        logger.info("end")
+        return v
     else:
         return other()
 

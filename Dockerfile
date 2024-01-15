@@ -7,7 +7,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get -y update \
 && apt-get -y install net-tools nginx supervisor gettext-base uwsgi uwsgi-plugin-python3 python3 python3-pip
 
-COPY requirements.txt log_conf.yaml /app/
+COPY requirements.txt wsgi.py /app/
 RUN pip3 install -r /app/requirements.txt --break-system-packages
 
 COPY avgate/avgate.py /app/avgate/
