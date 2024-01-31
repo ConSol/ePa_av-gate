@@ -7,8 +7,8 @@ import logging
 import os
 import re
 import socket
-import types
 import ssl
+import types
 from email.message import EmailMessage
 from typing import List, cast
 from urllib.parse import unquote, urlparse
@@ -17,7 +17,6 @@ import lxml.etree as ET
 import requests
 import urllib3
 from flask import Flask, Response, abort, request, stream_with_context
-from email.parser import BytesParser
 
 __version__ = "1.6"
 
@@ -42,9 +41,10 @@ config.read("avgate.ini")
 
 logging.getLogger().addHandler(logging.StreamHandler())
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(config.get("config", "log_level", fallback="INFO"))
 logger.info(f"avgate {__version__}")
 logger.debug(list(config["config"].items()))
+
 
 CONTENT_MAX = config["config"].getint("content_max", 800)
 REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
@@ -53,6 +53,7 @@ ALL_PDF_MALICIOUS = config["config"].getboolean("all_pdf_malicious", False)
 
 if config.has_option("config", "clamd_socket"):
     import clamd  # type: ignore
+
     global clamav
     clamdPath = config["config"]["clamd_socket"]
     clamav: clamd.ClamdUnixSocket = clamd.ClamdUnixSocket(clamdPath)
@@ -93,17 +94,19 @@ def connector_sds():
 @app.route("/<path:path>", methods=ALL_METHODS)
 def switch(path):
     """Entrypoint with filter for PHRService"""
-    logger.info("start")
+    logger.debug("start")
     if "PHRService" in path:
         v = phr_service()
-        logger.info("end")
+        logger.debug("end")
         return v
     else:
         return other()
 
+
 @app.route("/favicon.ico")
 def fav():
     return "ok"
+
 
 @app.route("/health")
 def health():
@@ -111,8 +114,9 @@ def health():
     res = check_clamav() or ""
     res += check_icap() or ""
     if res:
-        return Response(res, mimetype='text/xml', status=503)
+        return Response(res, mimetype="text/xml", status=503)
     return "OK"
+
 
 @app.route("/check")
 def check():
@@ -137,7 +141,7 @@ def check():
                 url=konn + "/connector.sds",
                 cert=cert,
                 verify=verify,
-                timeout=3
+                timeout=3,
             )
 
             if test.ok:
@@ -145,7 +149,9 @@ def check():
             else:
                 err_count += 1
                 res += f"{client} {konn}: {test.status_code} \n"
-                logging.warn(f"check failed for Konnektor {client} {konn} {test.status_code} {test.text}")
+                logging.warn(
+                    f"check failed for Konnektor {client} {konn} {test.status_code} {test.text}"
+                )
 
         except Exception as err:
             err_count += 1
@@ -159,18 +165,20 @@ def check_clamav():
     clamd_path = config["config"].get("clamd_socket")
     if clamd_path:
         test = clamav_sock.ping()
-        if  test != "PONG":
+        if test != "PONG":
             logger.warn(f"Healtchckeck failed for clamav: {test}")
             return "clamav: no ping\n"
+
 
 def check_icap():
     icap_host = config["config"].get("icap_host")
     if icap_host:
         try:
-            test = scan_file_icap(b"ping\r\n")
+            scan_file_icap(b"ping\r\n")
         except Exception as err:
             logger.warn(f"Healtcheck failed for icap: {err}")
             return "icap: failed\n"
+
 
 def phr_service():
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
@@ -179,7 +187,7 @@ def phr_service():
         data = run_antivirus(upstream)
 
         if not data:
-            logger.info("no new body, copying content from konnektor")
+            logger.debug("no new body, copying content from konnektor")
             data = upstream.content
 
         assert (
@@ -263,6 +271,7 @@ def get_client_config():
     else:
         logger.error(f"Client {client} or default not found in avgate.ini")
         abort(503)
+
 
 def create_response(data, upstream: Response) -> Response:
     """Create new response with copying headers from origin response"""
@@ -358,7 +367,13 @@ def run_antivirus(res: requests.Response):
         msg.set_payload([soap_part])
         for att in attachments:
             handle_attachment(
-                msg, response_xml, malicious_content_ids, xml_ns, xml_errlist, xml_documents, att
+                msg,
+                response_xml,
+                malicious_content_ids,
+                xml_ns,
+                xml_errlist,
+                xml_documents,
+                att,
             )
 
         if REMOVE_MALICIOUS:
@@ -375,7 +390,13 @@ def run_antivirus(res: requests.Response):
 
 
 def handle_attachment(
-    msg: EmailMessage, response_xml: ET._Element, malicious_content_ids: List[str], xml_ns: str, xml_errlist: ET._Element, xml_documents: dict, att
+    msg: EmailMessage,
+    response_xml: ET._Element,
+    malicious_content_ids: List[str],
+    xml_ns: str,
+    xml_errlist: ET._Element,
+    xml_documents: dict,
+    att,
 ):
     """removes or replaces malicious attachment"""
     content_id = extract_id(att["Content-ID"])
@@ -427,7 +448,7 @@ def get_malicious_content_ids(msg: EmailMessage):
             logger.info(f"virus found {content_id} : {scan_res}")
             yield content_id
         else:
-            logger.info(f"scanned document {content_id} : {scan_res}")
+            logger.debug(f"scanned document {content_id} : {scan_res}")
             if b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" in att.get_content():
                 logger.error(f"EICAR was not detected by clamav {content_id}")
 
@@ -484,7 +505,9 @@ def fix_status(xml_resp, xml_errlist, xml_ns, msg):
         )
 
 
-def build_payload(msg: EmailMessage, malicious_content_ids: List[str], res: requests.Response):
+def build_payload(
+    msg: EmailMessage, malicious_content_ids: List[str], res: requests.Response
+):
     "create payload based on original response with replacing only payoad for malicious_content_ids"
 
     content_type = res.headers["Content-Type"]
@@ -495,9 +518,8 @@ def build_payload(msg: EmailMessage, malicious_content_ids: List[str], res: requ
     payload: List[bytes] = []
     for part in res.content.split(boundary):
         content_id = get_content_id(part)
-        if (
-            content_id in malicious_content_ids
-            or (content_id == "root.message" and REMOVE_MALICIOUS)
+        if content_id in malicious_content_ids or (
+            content_id == "root.message" and REMOVE_MALICIOUS
         ):
             att = cast(
                 EmailMessage,
@@ -547,7 +569,9 @@ def get_replacement(mimetype):
 def dump(dict):
     return "\n".join([f"{k}: {v}" for (k, v) in dict.items()])
 
+
 # File Scanning
+
 
 def get_file_scanner():
     clamd_path = config["config"].get("clamd_socket")
@@ -557,25 +581,27 @@ def get_file_scanner():
         raise AttributeError("Neither clamd nor icap is configured")
     if clamd_path and icap_host:
         raise AttributeError("Both, clamd and icap is configured")
-    
+
     if clamd_path:
         # CLAMAV
         import clamd  # type: ignore
+
         global clamav_sock
-        clamav_sock = clamd.ClamdUnixSocket(
-            path=config["config"]["clamd_socket"])
+        clamav_sock = clamd.ClamdUnixSocket(path=config["config"]["clamd_socket"])
         return scan_file_clamav
     else:
         # ICAP
         return scan_file_icap
 
+
 def scan_file_clamav(content):
     "return scan result, do use clamav socket"
     scan_res = clamav_sock.instream(io.BytesIO(content))["stream"]
     return scan_res
-    
+
+
 def scan_file_icap(content):
-    "return scan result, do use icap"                
+    "return scan result, do use icap"
     icap_service = config["config"]["icap_service"]
     icap_host = config["config"]["icap_host"]
     icap_port = config["config"].getint("icap_port", 1344)
@@ -583,7 +609,7 @@ def scan_file_icap(content):
 
     req = f"RESPMOD {icap_service} ICAP/1.0\r\n"
     req += f"Host: {icap_host}\r\n"
-    req += f"Encapsulated: res-body=0\r\n\r\n"
+    req += "Encapsulated: res-body=0\r\n\r\n"
     req += f"{len(content):x}\r\n"
 
     footer = "\r\n0\r\n\r\n"
@@ -594,18 +620,18 @@ def scan_file_icap(content):
         sock.send(req.encode())
         sock.send(content)
         sock.send(footer.encode())
-    
+
         while True:
             data = sock.recv(4096)
             rcv_chunks.append(data)
-            if (not len(data) or data[-5:] == b"0\r\n\r\n"):
+            if not len(data) or data[-5:] == b"0\r\n\r\n":
                 break
 
-    rsp = b''.join(rcv_chunks)[:2048]
+    rsp = b"".join(rcv_chunks)[:2048]
 
     (first_block, second_block) = rsp.split(b"\r\n\r\n", 1)
-    first_line = first_block.partition(b'\r\n')[0]
-    http_response_code = second_block.partition(b'\r\n')[0]
+    first_line = first_block.partition(b"\r\n")[0]
+    http_response_code = second_block.partition(b"\r\n")[0]
     # logger.debug(first_block)
     # logger.debug(second_block[:500])
 
@@ -620,9 +646,9 @@ def scan_file_icap(content):
     if http_response_code != b"HTTP/1.0 403 Forbidden":
         return ["OK", None]
 
-    # gather additional information    
-    found = re.search(b"X-Infection-Found: .*Threat=(.*);", first_block)    
-    
+    # gather additional information
+    found = re.search(b"X-Infection-Found: .*Threat=(.*);", first_block)
+
     if found:
         return ["FOUND", found[1]]
 
@@ -630,7 +656,6 @@ def scan_file_icap(content):
 
 
 def _open_sock(host, port, tls):
-
     if tls:
         with socket.create_connection((host, port)) as sock:
             context = ssl.create_default_context()

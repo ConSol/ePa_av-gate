@@ -1,18 +1,16 @@
 import re
-from unittest import mock
 import xml.etree.ElementTree as ET
+from unittest import mock
 from unittest.mock import Mock
 
-from avgate import avgate
 import pytest
 import requests
 
+from avgate import avgate
+
 avgate.config.read_dict(
     {
-        "config": {
-            "remove_malicious": "true",
-            "icap_host": "127.0.0.1"
-        },
+        "config": {"remove_malicious": "true", "icap_host": "127.0.0.1"},
         "*:400": {"konnektor": "some"},
         "8.8.8.8:401": {"konnektor": "some", "proxy_all_services": "true"},
     }
@@ -20,13 +18,13 @@ avgate.config.read_dict(
 
 avgate.scan_file = avgate.get_file_scanner()
 
+
 @pytest.fixture
 def client(monkeypatch):
     avgate.config.update({"*:400": {"Konnektor": "https://nowhere.com"}})
 
     with avgate.app.test_client() as client:
         with avgate.app.app_context():
-
             # Mock Requests
             headers = {
                 "Content-Type": 'multipart/related; type="application/xop+xml"; '
@@ -52,7 +50,6 @@ def client(monkeypatch):
                     pass
 
             def mock_request(url: str, data: bytes, *args, **kwargs):
-
                 if url.endswith("connector.sds"):
                     return MockResponse(
                         content=open("samples/connector.sds", "rb")
@@ -107,13 +104,14 @@ def client(monkeypatch):
                 return MockResponse()
 
             monkeypatch.setattr(requests, "request", mock_request)
-        
+
             yield client
 
 
 @pytest.fixture
 def antivir(monkeypatch):
     "Mock antivir"
+
     def mock_antivir(data: bytes):
         if b"EICAR" in data:
             return ("FOUND", "Win.Test.EICAR_HDB-1")
@@ -121,7 +119,8 @@ def antivir(monkeypatch):
             return ("OK", None)
 
     monkeypatch.setattr(avgate, "scan_file", Mock(side_effect=mock_antivir))
-        
+
+
 @pytest.mark.parametrize(
     "real_ip,host,expected",
     [
@@ -133,6 +132,8 @@ def antivir(monkeypatch):
 )
 def test_routing_ip(client, real_ip, host, expected):
     "check config pick by ip and port"
+
+    avgate.config.remove_section("default")
 
     res = client.get(
         "/connector.sds",
@@ -211,8 +212,8 @@ def test_clam_av(client, antivir):
 
     parts = res.data.split(b"--uuid:6b62cda6-95c5-441d-9133-da3c5bfd7e6b")
     assert len(parts) == 6  # n+2
-    
-    xml = ET.fromstring(parts[1][re.search(b"(\r\n){2}", parts[1]).end() :])
+
+    ET.fromstring(parts[1][re.search(b"(\r\n){2}", parts[1]).end() :])
     assert avgate.scan_file.has_been_called()
 
 

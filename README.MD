@@ -6,7 +6,7 @@ Bei einem Fund von Malware wird das Dokument aus der Übertragung herausgenommen
 
 Alternativ kann das Dokument bei Fund von Maleware durch eine Datei gleichen Types (Mime-Type) ersetzt werden. In diesem Fall wird der Payload des Soap-Responses nicht verändert. Dies ist notwendig, wenn das Primärsystem die Fehlermeldungen nicht verarbeiten kann. Die Ersatz-Dokumente liegen in dem Unterverzeichnis `replacements` und enthalten jweils den Hinweis:
 
-> Das Dokument wurde ersetzt, weil beim originären Dokument potentiell schadhafter Code entdeckt wurde.  
+> Das Dokument wurde ersetzt, weil beim originären Dokument potentiell schadhafter Code entdeckt wurde.
 Das Original wird nicht ausgeliefert.
 
 Für den AV-Scan wird ICAP als Schnittstelle genutzt. Alternativ kann die open-source Lösung [ClamAV](https://www.clamav.net/) genutzt. Es erkennt schadhaften Code auch in Anhängen zu PDF, Excel und Word und OpenOffice Dokumenten. Testdateien mit der harmlosen [EICAR](https://www.eicar.org/?page_id=3950) Test-Signatur befinden sich für alle Mime-Typen im Verzeichnis `testfiles`. Nachdem Virenscanner regelmäßig auch bei den EICAR Testfiles aufschreien, wurden die Testfiles und Samples in einem zip-File abgelegt (password ist password).
@@ -25,10 +25,10 @@ Die Verbindung zum ClamAV Dienst erfolgt über unix Socket. Daher muss der clamd
 
 Die Trennung zwischen NGINX und AV-Gate wurde aus Gründen der Übersichtlichkeit weggelassen.
 
-1: Request der connector.sds  
+1: Request der connector.sds
 Die connector.sds ist ein Verzeichnis der Service-Adressen.
 
-2: Request an den Konnektor  
+2: Request an den Konnektor
 Hier wird ein neuer Request erzeugt (kein Forward oder Proxy). Der Request aus 1 wird gehalten.
 
 4: Die Adresse für PHRService, welche den Endpunkt RetrieveDocumentSet enthält wird durch die Adresse des AV-Gates ersetzt. Diese wird aus dem Request an das AV-Gate ermittelt.
@@ -41,7 +41,7 @@ Responses zu anderen Endpunkten als RetrieveDocumentSet werden direkt an das Pri
 8: AV-Scan
 Die aus dem Response extrahierten Dokumente werden via socket stream an den clamd übergeben. Die Dateien werden nicht im Filesystem gespeichert. Die Latenz durch den Scan ist sehr gering (<100ms).
 
-9: Remove Document  
+9: Remove Document
 Der XOP Teil der Nachricht für die betroffenen Dokumente wird entfernt und eine Fehlermeldung wird in den SOAP-Response geschrieben.
 Alternativ wird hier das Dokument ersetzt und der SOAP-Response ansonst nicht verändert.
 
@@ -86,10 +86,10 @@ Es werden benötigt:
 Bislang wurde als Host-System Ubuntu Server 22.04.3 LTS verwendet. Die oben genanten Versionen entsprechen dieser Konfiguration.
 
 1. ClamAV (nur, wenn nicht ICAP verwendet wird)
-/etc/clamav/clamd.conf  
+/etc/clamav/clamd.conf
 `LocalSocket /tmp/clamd.socket`
 
-2. Signaturen laden  
+2. Signaturen laden
 /etc/clamav/freshclam.conf
 `sh> freshclam`
 
@@ -99,7 +99,7 @@ Eine vollständig Beispielkonfiguration `nginx.conf` liegt bei. Ports, SSL-Zerti
 4. uWSGI
 Beispieldatei `uwsgi.ini` liegt bei. Socket und chdir müssen angepasst werden. Virtualenv kann weggelassen werden, wenn auf dem Server keine weiteren, anderen Python-Versionen benötigt werden.
 
-5. AV-Gate  
+5. AV-Gate
 Dateien avgate.py, avgate.ini, requirements.txt in ein Programmverzeichnis kopieren (z.B. /usr/local/avgate/).
 `sh> pip3 install -r requirements.txt`
 Der Pfad für den Socket in `avgate.ini` ist ggf. anzupassen.
@@ -112,10 +112,10 @@ In der `avgate.ini` ist für jeden Konnektor eine Gruppe anzulegen. Der Gruppenn
 
 Für jede Konnektor (jede Gruppe) kann konfiguriert werden:
 - konnektor = https://<host>
-- ssl_verify = true  
+- ssl_verify = true
 Die Zertifikate des Konnektors werden auf Gültigkeit überprüft. Verbindungen mit ungültigen (auch selfsigned) Zertifikaten werden abgelehnt.
-- ssl_cert = <pfad.crt>  
-- ssl_key = <pfad.key>  
+- ssl_cert = <pfad.crt>
+- ssl_key = <pfad.key>
 Client-Zertifikat für Autorisierung gegenüber Konnektor. Die Zertifikate können als als .crt oder .pem hinterlegt werden und dürfen nicht verschlüsselt sein.
 
 Auf jeden Arbeitsplatzrechner muss in der Konfiguration der Primärsysteme die IP-Adresse des AV-Gates als Konnektor eingetragen werden.
@@ -151,13 +151,37 @@ Die benötigten Zertifikate sind am einfachsten per mount einzubringen. Folgende
 Zum Starten:
 
 ```sh
-docker run --name avgate -p 443:443  \
+docker run --name avgate -p 443:443 -p 389:389 -p  \
 -e ICAP_HOST=<av_server> \
 -e ICAP_SERVICE=<icap://av_server/service> \
 -e KONNEKTOR=https://<konnektor> \
+-e SSL_VERIFY=true \
 --mount type=bind,source="$(pwd)"/cert,target=/app/cert,readonly \
 avgate
 ```
+
+Bitte beim Mount der Zertifikate darauf achten, dass Leseberechtigung bestehen.
+
+Die ENV vars:
+
+- KONNEKTOR
+  URI des Konnektors
+
+- ICAP_HOST - default ist host.containers.internal
+  Hostname ohne Port des ICAP Servers
+
+- ICAP_SERVICE - default ist icap://any/avscan
+  ICAP Service als URI. Der Service musss im ICAP Server konfiguriert sein.
+
+- SSL_VERIFY - default ist true
+  Überprüfung des Server-Zertifikats vom Konnektor
+
+- SSL_VERIFY_CLIENT - default is on
+  Überprüfung der Client-Zertifikate
+
+- LOG_LEVEL - default INFO
+  einer aus DEBUG INFO WARNING ERROR CRITICAL
+
 
 ## Primärsysteme
 
@@ -171,6 +195,6 @@ Das AV-Gate wurde für folgende Primärsysteme getestet:
 
 --
 
-Consol GmbH  
-Norbert Ferchen  
+Consol GmbH
+Norbert Ferchen
 Jan 2024
