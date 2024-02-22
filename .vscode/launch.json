@@ -6,7 +6,7 @@
   "configurations": [
     {
       "name": "AV-Gate",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "module": "flask",
       "env": {"FLASK_APP": "avgate/avgate.py", "FLASK_DEBUG": "1"},
@@ -16,7 +16,7 @@
     },
     {
       "name": "Konnektor Mock",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "module": "flask",
       "env": {"FLASK_APP": "avgate/konnektor_mock.py", "FLASK_DEBUG": "1"},

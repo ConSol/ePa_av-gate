@@ -1,5 +1,6 @@
-from flask import Flask, send_file
 import io
+
+from flask import Flask, abort, send_file
 
 app = Flask(__name__)
 
@@ -37,6 +38,11 @@ def connector_sds():
     apply_headers(response)
 
     return response
+
+
+@app.route("/SignatureService", methods=["POST", "GET"])
+def signature_service():
+    abort(500, "will not work")
 
 
 def apply_headers(response):

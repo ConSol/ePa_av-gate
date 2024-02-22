@@ -39,9 +39,12 @@ config = configparser.ConfigParser()
 
 config.read("avgate.ini")
 
-logging.getLogger().addHandler(logging.StreamHandler())
+loglevel = config.get("config", "log_level", fallback="INFO")
+logging.basicConfig(
+    level=loglevel, format="[%(asctime)s] %(levelname)-8s in %(module)s: %(message)s"
+)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(config.get("config", "log_level", fallback="INFO"))
 logger.info(f"avgate {__version__}")
 logger.debug(list(config["config"].items()))
 
@@ -72,17 +75,17 @@ def connector_sds():
         if client_config.getboolean("proxy_all_services", False):
             for e in xml.findall("{*}ServiceInformation/{*}Service//{*}EndpointTLS"):
                 previous_url = urlparse(e.attrib["Location"])
-                e.attrib[
-                    "Location"
-                ] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
+                e.attrib["Location"] = (
+                    f"{previous_url.scheme}://{request.host}{previous_url.path}"
+                )
 
         for e in xml.findall(
             "{*}ServiceInformation/{*}Service[@Name='PHRService']//{*}EndpointTLS"
         ):
             previous_url = urlparse(e.attrib["Location"])
-            e.attrib[
-                "Location"
-            ] = f"{previous_url.scheme}://{request.host}{previous_url.path}"
+            e.attrib["Location"] = (
+                f"{previous_url.scheme}://{request.host}{previous_url.path}"
+            )
             global phr_service_path
             phr_service_path = previous_url.path
         else:
@@ -248,6 +251,12 @@ def request_upstream(client_config, warn=True, stream=False):
                 f"Found Konnektor Address in response: {konn} - {request.url}"
             )
 
+        if not response.ok:
+            logger.warning(
+                f"Error from Konnektor: {response.url} - {response.status_code} {response.reason}"
+            )
+            logger.warning(f"Response: {response.content}")
+
         return response
 
     except Exception as err:
@@ -256,7 +265,7 @@ def request_upstream(client_config, warn=True, stream=False):
 
 
 def get_client_config():
-    request_ip = request.headers.get("X-real-ip", request.host)
+    request_ip = request.headers.get("X-real-ip", request.host.split(":")[0])
     port = request.host.split(":")[1] if ":" in request.host else "443"
 
     client = f"{request_ip}:{port}"
@@ -489,9 +498,9 @@ def fix_status(xml_resp, xml_errlist, xml_ns, msg):
     if len(msg.get_payload()) > 1:
         xml_resp.attrib["status"] = "urn:ihe:iti:2007:ResponseStatusType:PartialSuccess"
     else:
-        xml_resp.attrib[
-            "status"
-        ] = "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure"
+        xml_resp.attrib["status"] = (
+            "urn:oasis:names:tc:ebxml-regrep:ResponseStatusType:Failure"
+        )
         xml_errlist.append(
             ET.Element(
                 f"{xml_ns}RegistryError",
