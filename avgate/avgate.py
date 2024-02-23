@@ -12,6 +12,7 @@ import types
 from email.message import EmailMessage
 from typing import List, cast
 from urllib.parse import unquote, urlparse
+from prometheus_flask_instrumentator import PrometheusFlaskInstrumentator
 
 import lxml.etree as ET
 import requests
@@ -35,6 +36,7 @@ ALL_METHODS = [
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
+PrometheusFlaskInstrumentator().instrument(app).expose(app)
 config = configparser.ConfigParser()
 
 config.read("avgate.ini")

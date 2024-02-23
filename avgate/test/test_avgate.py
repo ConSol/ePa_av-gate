@@ -37,6 +37,7 @@ def client(monkeypatch):
                 headers = {"Test-Header": "bla"}
                 content = b"""bla bla"""
                 status_code = 200
+                ok = True
                 raw = mock.Mock()
                 raw.headers = {"bla": "foo"}
 
