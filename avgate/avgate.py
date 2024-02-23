@@ -222,7 +222,7 @@ def request_upstream(client_config, warn=True, stream=False):
     """Request to real Konnektor"""
 
     konn = client_config["Konnektor"]
-    url = konn + request.url
+    url = konn + request.full_path
     data = request.get_data()
 
     # client cert
