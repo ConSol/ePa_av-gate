@@ -220,7 +220,7 @@ def request_upstream(client_config, warn=True, stream=False):
     """Request to real Konnektor"""
 
     konn = client_config["Konnektor"]
-    url = konn + request.path
+    url = konn + request.url
     data = request.get_data()
 
     # client cert
@@ -256,6 +256,7 @@ def request_upstream(client_config, warn=True, stream=False):
                 f"Error from Konnektor: {response.url} - {response.status_code} {response.reason}"
             )
             logger.warning(f"Response: {response.content}")
+            logger.warning(f"Cert: {request.headers.get('X-Client-Cert')}")
 
         return response
 
