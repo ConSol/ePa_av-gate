@@ -12,7 +12,6 @@ import types
 from email.message import EmailMessage
 from typing import List, cast
 from urllib.parse import unquote, urlparse
-from prometheus_flask_instrumentator import PrometheusFlaskInstrumentator
 
 import lxml.etree as ET
 import requests
@@ -36,7 +35,7 @@ ALL_METHODS = [
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
-PrometheusFlaskInstrumentator().instrument(app).expose(app)
+
 config = configparser.ConfigParser()
 
 config.read("avgate.ini")
@@ -119,7 +118,7 @@ def health():
     res = check_clamav() or ""
     res += check_icap() or ""
     if res:
-        return Response(res, mimetype="text/xml", status=503)
+        return Response(res, mimetype="text/plain", status=503)
     return "OK"
 
 
@@ -150,7 +149,7 @@ def check():
             )
 
             if test.ok:
-                res += f"{konn}: ok"
+                res += f"{konn}: ok \n"
             else:
                 err_count += 1
                 res += f"{client} {konn}: {test.status_code} \n"
@@ -163,7 +162,7 @@ def check():
             res += f"{client} {konn}: {err} \n"
             logger.warn(f"check failed for Konnektor: {client} {konn} {err}")
 
-    return Response(res, mimetype="text/xml", status=503 if err_count else 200)
+    return Response(res, mimetype="text/plain", status=503 if err_count else 200)
 
 
 def check_clamav():

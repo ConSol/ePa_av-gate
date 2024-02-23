@@ -17,8 +17,6 @@ mypy==1.8.0
 mypy-extensions==1.0.0
 packaging==23.2
 pluggy==1.4.0
-prometheus-flask-instrumentator==4.1.1
-prometheus_client==0.20.0
 pycparser==2.21
 pytest==8.0.1
 requests==2.31.0
