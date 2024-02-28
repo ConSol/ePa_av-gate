@@ -10,7 +10,7 @@ def root():
     return "up and running"
 
 
-@app.route("/soap-api/PHRService/1.3.0", methods=["POST", "GET"])
+@app.route("/ws/PHRService/1.3.0", methods=["POST", "GET"])
 def soap():
     fn = open("./samples/retrievedocument-resp_eicar", "br")
     b = io.BytesIO(fn.read().replace(b"\n", b"\r\n"))
@@ -40,7 +40,7 @@ def connector_sds():
     return response
 
 
-@app.route("/SignatureService", methods=["POST", "GET"])
+@app.route("/ws/SignatureService", methods=["POST", "GET"])
 def signature_service():
     abort(500, "will not work")
 

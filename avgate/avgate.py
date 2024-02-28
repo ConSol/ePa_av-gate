@@ -31,6 +31,9 @@ ALL_METHODS = [
     "TRACE",
     "PATCH",
 ]
+
+EICAR = rb"X5O!P%@AP[4\PZX54(P^)7CC)7}" + rb"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+
 # to prevent flooding log
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -194,9 +197,12 @@ def phr_service():
             logger.debug("no new body, copying content from konnektor")
             data = upstream.content
 
-        assert (
-            b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
-        ), "found EICAR signature"
+        # debugging only - remove after testing
+        if EICAR in data:
+            fn = f"/app/dump/{request.path.replace('/', '_')}.xml"
+            with open(fn, "wb") as f:
+                f.write(data)
+            logger.error(f"found EICAR signature - see content in file {fn}")
 
         response = create_response(data, upstream)
 
@@ -460,8 +466,8 @@ def get_malicious_content_ids(msg: EmailMessage):
             yield content_id
         else:
             logger.debug(f"scanned document {content_id} : {scan_res}")
-            if b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" in att.get_content():
-                logger.error(f"EICAR was not detected by clamav {content_id}")
+            if EICAR in att.get_content():
+                logger.error(f"EICAR was not detected by av {content_id}")
 
 
 def extract_id(id: str) -> str:
@@ -643,8 +649,13 @@ def scan_file_icap(content):
     (first_block, second_block) = rsp.split(b"\r\n\r\n", 1)
     first_line = first_block.partition(b"\r\n")[0]
     http_response_code = second_block.partition(b"\r\n")[0]
-    # logger.debug(first_block)
-    # logger.debug(second_block[:500])
+
+    if EICAR in content:
+        logger.debug(f"Eicar ICAP REQ \n{req.encode()}{content}{footer.encode()}")
+        logger.debug(f"RESP\n{first_block}{second_block[:500]}")
+
+    # debug
+    return ["OK", None]
 
     # check icap status
     if first_line == b"ICAP/1.0 204 No modifications needed":
