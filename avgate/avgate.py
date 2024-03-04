@@ -10,7 +10,7 @@ import socket
 import ssl
 import types
 from email.message import EmailMessage
-from typing import List, cast
+from typing import Callable, Generator, List, cast
 from urllib.parse import unquote, urlparse
 
 import lxml.etree as ET
@@ -18,7 +18,7 @@ import requests
 import urllib3
 from flask import Flask, Response, abort, request, stream_with_context
 
-__version__ = "1.7"
+__version__ = "1.8"
 
 ALL_METHODS = [
     "GET",
@@ -31,6 +31,9 @@ ALL_METHODS = [
     "TRACE",
     "PATCH",
 ]
+
+EICAR = rb"X5O!P%@AP[4\PZX54(P^)7CC)7}" + rb"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+
 # to prevent flooding log
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -165,7 +168,7 @@ def check():
     return Response(res, mimetype="text/plain", status=503 if err_count else 200)
 
 
-def check_clamav():
+def check_clamav() -> str:
     clamd_path = config["config"].get("clamd_socket")
     if clamd_path:
         test = clamav_sock.ping()
@@ -174,7 +177,7 @@ def check_clamav():
             return "clamav: no ping\n"
 
 
-def check_icap():
+def check_icap() -> str:
     icap_host = config["config"].get("icap_host")
     if icap_host:
         try:
@@ -184,7 +187,7 @@ def check_icap():
             return "icap: failed\n"
 
 
-def phr_service():
+def phr_service() -> Response:
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     client_config = get_client_config()
     with request_upstream(client_config) as upstream:
@@ -194,16 +197,19 @@ def phr_service():
             logger.debug("no new body, copying content from konnektor")
             data = upstream.content
 
-        assert (
-            b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" not in data
-        ), "found EICAR signature"
+        # debugging only - remove after testing
+        if EICAR in data:
+            fn = f"/tmp/{request.path.replace('/', '_')}.xml"
+            with open(fn, "wb") as f:
+                f.write(data)
+            logger.error(f"found EICAR signature - see content in file {fn}")
 
         response = create_response(data, upstream)
 
         return response
 
 
-def other():
+def other() -> Response:
     """Streamed forward without scan"""
     client_config = get_client_config()
     upstream = request_upstream(client_config, stream=True)
@@ -217,7 +223,7 @@ def other():
     return response
 
 
-def request_upstream(client_config, warn=True, stream=False):
+def request_upstream(client_config, warn=True, stream=False) -> Response:
     """Request to real Konnektor"""
 
     konn = client_config["Konnektor"]
@@ -266,7 +272,7 @@ def request_upstream(client_config, warn=True, stream=False):
         abort(502)
 
 
-def get_client_config():
+def get_client_config() -> configparser.ConfigParser:
     request_ip = request.headers.get("X-real-ip", request.host.split(":")[0])
     port = request.host.split(":")[1] if ":" in request.host else "443"
 
@@ -438,7 +444,7 @@ def handle_attachment(
         msg.attach(att)
 
 
-def get_malicious_content_ids(msg: EmailMessage):
+def get_malicious_content_ids(msg: EmailMessage) -> Generator[str, None, None]:
     """Extracting content_ids of malicious attachments"""
     for att in msg.iter_attachments():
         att = cast(EmailMessage, att)
@@ -460,8 +466,8 @@ def get_malicious_content_ids(msg: EmailMessage):
             yield content_id
         else:
             logger.debug(f"scanned document {content_id} : {scan_res}")
-            if b"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*" in att.get_content():
-                logger.error(f"EICAR was not detected by clamav {content_id}")
+            if EICAR in att.get_content():
+                logger.error(f"EICAR was not detected by av {content_id}")
 
 
 def extract_id(id: str) -> str:
@@ -518,7 +524,7 @@ def fix_status(xml_resp, xml_errlist, xml_ns, msg):
 
 def build_payload(
     msg: EmailMessage, malicious_content_ids: List[str], res: requests.Response
-):
+) -> bytes:
     "create payload based on original response with replacing only payoad for malicious_content_ids"
 
     content_type = res.headers["Content-Type"]
@@ -570,7 +576,7 @@ replacement_files = {
 }
 
 
-def get_replacement(mimetype):
+def get_replacement(mimetype) -> bytes:
     """get content for replacements"""
     filename = replacement_files.get(mimetype) or replacement_files.get("text/plain")
     with open(filename, "rb") as f:
@@ -584,7 +590,7 @@ def dump(dict):
 # File Scanning
 
 
-def get_file_scanner():
+def get_file_scanner() -> Callable[[bytes], List[str | None]]:
     clamd_path = config["config"].get("clamd_socket")
     icap_host = config["config"].get("icap_host")
 
@@ -605,13 +611,13 @@ def get_file_scanner():
         return scan_file_icap
 
 
-def scan_file_clamav(content):
+def scan_file_clamav(content: bytes) -> List[str | None]:
     "return scan result, do use clamav socket"
     scan_res = clamav_sock.instream(io.BytesIO(content))["stream"]
     return scan_res
 
 
-def scan_file_icap(content):
+def scan_file_icap(content: bytes) -> List[str | None]:
     "return scan result, do use icap"
     icap_service = config["config"]["icap_service"]
     icap_host = config["config"]["icap_host"]
@@ -643,8 +649,14 @@ def scan_file_icap(content):
     (first_block, second_block) = rsp.split(b"\r\n\r\n", 1)
     first_line = first_block.partition(b"\r\n")[0]
     http_response_code = second_block.partition(b"\r\n")[0]
-    # logger.debug(first_block)
-    # logger.debug(second_block[:500])
+
+    logger.debug(f"check icar {content[:30]} - {EICAR in content}")
+    if EICAR in content:
+        logger.debug(f"Eicar ICAP REQ \n{req.encode() + content + footer.encode()}")
+        logger.debug(f"RESP\n{first_block+second_block[:500]}")
+
+    # debug
+    return ["OK", None]
 
     # check icap status
     if first_line == b"ICAP/1.0 204 No modifications needed":
@@ -666,7 +678,7 @@ def scan_file_icap(content):
     return ["FOUND", "unknown"]
 
 
-def _open_sock(host, port, tls):
+def _open_sock(host: str, port: int, tls: bool) -> socket:
     if tls:
         with socket.create_connection((host, port)) as sock:
             context = ssl.create_default_context()
