@@ -31,7 +31,3 @@ RUN chmod u+x /app/startup.sh
 ENTRYPOINT ["/app/startup.sh"]
 
 EXPOSE 443
-
-# DEBUG
-RUN mkdir /app/dump
-RUN chown www-data:www-data /app/dump
