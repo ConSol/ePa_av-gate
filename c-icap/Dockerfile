@@ -18,6 +18,8 @@ RUN apt-get update && \
     echo "Allow204As200okZeroEncaps on" >> /etc/c-icap/c-icap.conf && \
     echo "Include clamav_mod.conf" >> /etc/c-icap/virus_scan.conf
 
+# remove Allow204As200okZeroEncaps when use 200 instead of 204
+
 ADD ./entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 USER c-icap

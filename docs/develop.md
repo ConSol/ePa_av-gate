@@ -19,7 +19,7 @@ Ein lokaler icap server kann gestartet werden über
 
 AV-Gate als Docker
 ```
-    docker build -t av-gate .
+    docker build -t avgate .
 
     docker run --rm --name avgate -p 443:443 \
     -e ICAP_HOST=host.docker.internal \

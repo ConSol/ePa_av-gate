@@ -112,7 +112,7 @@ def switch(path):
 
 @app.route("/favicon.ico")
 def fav():
-    return "ok"
+    return "OK\n"
 
 
 @app.route("/health")
@@ -122,7 +122,7 @@ def health():
     res += check_icap() or ""
     if res:
         return Response(res, mimetype="text/plain", status=503)
-    return "OK"
+    return "OK\n"
 
 
 @app.route("/check")
@@ -152,7 +152,7 @@ def check():
             )
 
             if test.ok:
-                res += f"{konn}: ok \n"
+                res += f"{konn}: OK \n"
             else:
                 err_count += 1
                 res += f"{client} {konn}: {test.status_code} \n"
@@ -628,35 +628,35 @@ def scan_file_icap(content: bytes) -> List[str | None]:
     req += f"Host: {icap_host}\r\n"
     req += "Encapsulated: res-body=0\r\n\r\n"
     req += f"{len(content):x}\r\n"
+    request = req.encode()
 
-    footer = "\r\n0\r\n\r\n"
+    footer = "\r\n0\r\n\r\n".encode()
 
     rcv_chunks = []
 
     with _open_sock(icap_host, icap_port, icap_tls) as sock:
-        sock.send(req.encode())
+        sock.send(request)
         sock.send(content)
-        sock.send(footer.encode())
+        sock.send(footer)
 
         while True:
             data = sock.recv(4096)
             rcv_chunks.append(data)
+            logger.debug(f"ICAP received {len(data)}")
             if not len(data) or data[-5:] == b"0\r\n\r\n":
+                logger.debug(f"ICAP received total {len(rcv_chunks)}")
                 break
 
-    rsp = b"".join(rcv_chunks)[:2048]
+    rsp = b"".join(rcv_chunks)
 
     (first_block, second_block) = rsp.split(b"\r\n\r\n", 1)
     first_line = first_block.partition(b"\r\n")[0]
-    http_response_code = second_block.partition(b"\r\n")[0]
+    content_back = second_block.partition(b"\r\n")[2][: -len(footer)]
 
     logger.debug(f"check icar {content[:30]} - {EICAR in content}")
-    if EICAR in content:
-        logger.debug(f"Eicar ICAP REQ \n{req.encode() + content + footer.encode()}")
-        logger.debug(f"RESP\n{first_block+second_block[:500]}")
-
-    # debug
-    return ["OK", None]
+    if True:
+        logger.debug(f"ICAP REQ  {request + content + footer}"[:200])
+        logger.debug(f"ICAP RESP {first_block + content_back}"[:300])
 
     # check icap status
     if first_line == b"ICAP/1.0 204 No modifications needed":
@@ -665,17 +665,24 @@ def scan_file_icap(content: bytes) -> List[str | None]:
     if first_line != b"ICAP/1.0 200 OK":
         raise EnvironmentError("ICAP not OK", first_line)
 
-    # check response status
-    if http_response_code != b"HTTP/1.0 403 Forbidden":
-        return ["OK", None]
-
-    # gather additional information
+    # check infection
     found = re.search(b"X-Infection-Found: .*Threat=(.*);", first_block)
 
+    # real finding
     if found:
         return ["FOUND", found[1]]
 
-    return ["FOUND", "unknown"]
+    # in case of 200 the content should be unchanged
+    if content == content_back:
+        logger.warn("ICAP returns 200 instead of 204 on unchanged content")
+        return ["OK", None]
+
+    # modified content without infection found
+    logger.warn("ICAP modified content without findings")
+    logger.debug(f"IN  {content[-100:]}")
+    logger.debug(f"OUT {content_back[-100:]})")
+
+    return ["OK", None]
 
 
 def _open_sock(host: str, port: int, tls: bool) -> socket:
