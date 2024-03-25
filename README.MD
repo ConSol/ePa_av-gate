@@ -155,7 +155,7 @@ docker run --name avgate -p 443:443 -p 389:389 -p  \
 -e ICAP_HOST=<av_server> \
 -e ICAP_SERVICE=<icap://av_server/service> \
 -e KONNEKTOR=https://<konnektor> \
--e SSL_VERIFY=true \
+-e SSL_VERIFY=off \
 --mount type=bind,source="$(pwd)"/cert,target=/app/cert,readonly \
 avgate
 ```
@@ -173,10 +173,10 @@ Die ENV vars:
 - ICAP_SERVICE - default ist icap://any/avscan
   ICAP Service als URI. Der Service musss im ICAP Server konfiguriert sein.
 
-- SSL_VERIFY - default ist true
+- SSL_VERIFY - default ist on
   Überprüfung des Server-Zertifikats vom Konnektor
 
-- SSL_VERIFY_CLIENT - default is on
+- SSL_VERIFY_CLIENT - default ist on
   Überprüfung der Client-Zertifikate
 
 - LOG_LEVEL - default INFO

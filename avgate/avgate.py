@@ -101,10 +101,10 @@ def connector_sds():
 @app.route("/<path:path>", methods=ALL_METHODS)
 def switch(path):
     """Entrypoint with filter for PHRService"""
-    logger.debug("start")
     if "PHRService" in path:
+        logger.debug("start PHRService")
         v = phr_service()
-        logger.debug("end")
+        logger.debug("end PHRService")
         return v
     else:
         return other()
@@ -125,6 +125,18 @@ def health():
     return "OK\n"
 
 
+@app.route("/icap")
+def icap():
+    """Running tests on icap directly"""
+    return get_icap(EICAR)
+
+
+@app.post("/icap")
+def icap_post():
+    """Running icap with post data"""
+    return get_icap(request.get_data())
+
+
 @app.route("/check")
 def check():
     """Health check for Konnektors"""
@@ -140,7 +152,7 @@ def check():
         cert = None
         if client_config.get("ssl_cert"):
             cert = (client_config["ssl_cert"], client_config["ssl_key"])
-        verify = client_config.getboolean("ssl_verify")
+        verify = client_config.get("ssl_verify").lower != "off"
 
         try:
             test = requests.request(
@@ -234,7 +246,7 @@ def request_upstream(client_config, warn=True, stream=False) -> Response:
     cert = None
     if client_config.get("ssl_cert"):
         cert = (client_config["ssl_cert"], client_config["ssl_key"])
-    verify = client_config.getboolean("ssl_verify")
+    verify = client_config.get("ssl_verify").lower() != "off"
 
     headers = {
         key: value
@@ -525,7 +537,7 @@ def fix_status(xml_resp, xml_errlist, xml_ns, msg):
 def build_payload(
     msg: EmailMessage, malicious_content_ids: List[str], res: requests.Response
 ) -> bytes:
-    "create payload based on original response with replacing only payoad for malicious_content_ids"
+    """create payload based on original response with replacing only payoad for malicious_content_ids"""
 
     content_type = res.headers["Content-Type"]
     m = re.search('boundary="(.*?)"', content_type, re.I)
@@ -612,13 +624,48 @@ def get_file_scanner() -> Callable[[bytes], List[str | None]]:
 
 
 def scan_file_clamav(content: bytes) -> List[str | None]:
-    "return scan result, do use clamav socket"
+    """return scan result, do use clamav socket"""
     scan_res = clamav_sock.instream(io.BytesIO(content))["stream"]
     return scan_res
 
 
 def scan_file_icap(content: bytes) -> List[str | None]:
-    "return scan result, do use icap"
+    """return scan result, do use icap"""
+    icap_response = get_icap(content)
+    (first_block, second_block) = icap_response.split(b"\r\n\r\n", 1)
+    first_line = first_block.partition(b"\r\n")[0]
+    FOOTER_LENGTH = 7
+    content_back = second_block.partition(b"\r\n")[2][:-FOOTER_LENGTH]
+
+    # check icap status
+    if first_line == b"ICAP/1.0 204 No modifications needed":
+        return ["OK", None]
+
+    if first_line != b"ICAP/1.0 200 OK":
+        raise EnvironmentError("ICAP not OK", first_line)
+
+    # check infection
+    found = re.search(b"X-Infection-Found: .*Threat=(.*);", first_block)
+
+    # real finding
+    if found:
+        return ["FOUND", found[1]]
+
+    # in case of 200 the content should be unchanged
+    if content == content_back:
+        logger.warn("ICAP returns 200 instead of 204 on unchanged content")
+        return ["OK", None]
+
+    # modified content without infection found
+    logger.warn("ICAP modified content without findings")
+    logger.debug(f"IN  ...{content[-100:]}")
+    logger.debug(f"OUT ...{content_back[-100:]})")
+
+    return ["OK", None]
+
+
+def get_icap(content: bytes) -> bytes:
+    """do icap request in RESPMOD"""
     icap_service = config["config"]["icap_service"]
     icap_host = config["config"]["icap_host"]
     icap_port = config["config"].getint("icap_port", 1344)
@@ -642,50 +689,14 @@ def scan_file_icap(content: bytes) -> List[str | None]:
         while True:
             data = sock.recv(4096)
             rcv_chunks.append(data)
-            logger.debug(f"ICAP received {len(data)}")
             if not len(data) or data[-5:] == b"0\r\n\r\n":
-                logger.debug(f"ICAP received total {len(rcv_chunks)}")
                 break
 
-    rsp = b"".join(rcv_chunks)
-
-    (first_block, second_block) = rsp.split(b"\r\n\r\n", 1)
-    first_line = first_block.partition(b"\r\n")[0]
-    content_back = second_block.partition(b"\r\n")[2][: -len(footer)]
-
-    logger.debug(f"check icar {content[:30]} - {EICAR in content}")
-    if True:
-        logger.debug(f"ICAP REQ  {request + content + footer}"[:200])
-        logger.debug(f"ICAP RESP {first_block + content_back}"[:300])
-
-    # check icap status
-    if first_line == b"ICAP/1.0 204 No modifications needed":
-        return ["OK", None]
-
-    if first_line != b"ICAP/1.0 200 OK":
-        raise EnvironmentError("ICAP not OK", first_line)
-
-    # check infection
-    found = re.search(b"X-Infection-Found: .*Threat=(.*);", first_block)
-
-    # real finding
-    if found:
-        return ["FOUND", found[1]]
-
-    # in case of 200 the content should be unchanged
-    if content == content_back:
-        logger.warn("ICAP returns 200 instead of 204 on unchanged content")
-        return ["OK", None]
-
-    # modified content without infection found
-    logger.warn("ICAP modified content without findings")
-    logger.debug(f"IN  {content[-100:]}")
-    logger.debug(f"OUT {content_back[-100:]})")
-
-    return ["OK", None]
+    return b"".join(rcv_chunks)
 
 
 def _open_sock(host: str, port: int, tls: bool) -> socket:
+    """returns socket, with TLS if needed"""
     if tls:
         with socket.create_connection((host, port)) as sock:
             context = ssl.create_default_context()

@@ -25,7 +25,7 @@ AV-Gate als Docker
     -e ICAP_HOST=host.docker.internal \
     -e ICAP_SERVICE=icap://av_server/avscan \
     -e KONNEKTOR=https://host.docker.internal:5000 \
-    -e SSL_VERIFY=false \
+    -e SSL_VERIFY=off \
     -e LOG_LEVEL=DEBUG \
     --mount type=bind,source="$(pwd)"/cert,target=/app/cert,readonly \
     avgate

@@ -1,7 +1,7 @@
 FROM nginx:1.25
 
 # check server cert from konnektor
-ENV SSL_VERIFY true
+ENV SSL_VERIFY on
 # check client cert for incomming connections
 ENV SSL_VERIFY_CLIENT on
 

@@ -3,7 +3,7 @@
 export KONNEKTOR_HOST=$(echo $KONNEKTOR | cut -d'/' -f3 | cut -d':' -f1)
 
 envsubst '${ICAP_HOST} ${ICAP_SERVICE} ${KONNEKTOR} ${SSL_VERIFY} ${ICAP_HOST} ${ICAP_SERVICE} ${LOG_LEVEL}' < /app/template/avgate.ini > /app/avgate.ini
-envsubst '${KONNEKTOR} ${KONNEKTOR_HOST} ${SSL_VERIFY_CLIENT}' < /app/template/nginx.conf > /app/nginx.conf
+envsubst '${KONNEKTOR} ${KONNEKTOR_HOST} ${SSL_VERIFY} ${SSL_VERIFY_CLIENT}' < /app/template/nginx.conf > /app/nginx.conf
 
 # if you prefer certs via env vars
 # echo ${KCLIENT_CERT} > /app/cert/kclient.cert
