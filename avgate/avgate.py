@@ -210,12 +210,8 @@ def phr_service() -> Response:
             logger.debug("no new body, copying content from konnektor")
             data = upstream.content
 
-        # debugging only - remove after testing
         if EICAR in data:
-            fn = f"/tmp/{request.path.replace('/', '_')}.xml"
-            with open(fn, "wb") as f:
-                f.write(data)
-            logger.error(f"found EICAR signature - see content in file {fn}")
+            logger.error("found EICAR signature")
 
         response = create_response(data, upstream)
 
