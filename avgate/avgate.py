@@ -72,6 +72,7 @@ def connector_sds():
     # <si:Service Name="PHRService">
     # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRService/1.3.0"/>
 
+    logger.debug(f"Client Cert: {request.headers.get('X-Client-Cert') or None}")
     client_config = get_client_config()
     with request_upstream(client_config, warn=False) as upstream:
         xml = ET.fromstring(upstream.content)
