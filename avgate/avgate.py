@@ -18,7 +18,7 @@ import requests
 import urllib3
 from flask import Flask, Response, abort, request, stream_with_context
 
-__version__ = "1.8"
+__version__ = "1.9"
 
 ALL_METHODS = [
     "GET",
