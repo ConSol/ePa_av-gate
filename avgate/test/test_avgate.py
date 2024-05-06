@@ -157,31 +157,31 @@ def test_connector_sds(client):
         xml.find(
             "{*}ServiceInformation/{*}Service[@Name='PHRManagementService']/{*}Versions/{*}Version[@Version='1.3.0']/{*}EndpointTLS"
         ).attrib["Location"]
-        == "https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0"
+        == "https://kon-instanz1.titus.ti-dienste.de:443/ws/PHRManagementService/1.3.0"
     )
     assert (
         xml.find(
             "{*}ServiceInformation/{*}Service[@Name='PHRManagementService']/{*}Versions/{*}Version[@Version='2.0']/{*}EndpointTLS"
         ).attrib["Location"]
-        == "https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/2.0"
+        == "https://kon-instanz1.titus.ti-dienste.de:443/ws/PHRManagementService/2.0"
     )
     assert (
         xml.find(
             "{*}ServiceInformation/{*}Service[@Name='PHRService']/{*}Versions/{*}Version[@Version='1.3.0']/{*}EndpointTLS"
         ).attrib["Location"]
-        == "https://7.7.7.7:400/soap-api/PHRService/1.3.0"
+        == "https://7.7.7.7:400/ws/PHRService/1.3.0"
     )
     assert (
         xml.find(
             "{*}ServiceInformation/{*}Service[@Name='PHRService']/{*}Versions/{*}Version[@Version='2.0']/{*}EndpointTLS"
         ).attrib["Location"]
-        == "https://7.7.7.7:400/soap-api/PHRService/2.0"
+        == "https://7.7.7.7:400/ws/PHRService/2.0"
     )
     assert (
         xml.find(
             "{*}ServiceInformation/{*}Service[@Name='PHRManagementService']/{*}Versions/{*}Version[@Version='1.3.0']/{*}EndpointTLS"
         ).attrib["Location"]
-        == "https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRManagementService/1.3.0"
+        == "https://kon-instanz1.titus.ti-dienste.de:443/ws/PHRManagementService/1.3.0"
     )
 
 
@@ -199,14 +199,14 @@ def test_proxy_all_service(client):
         )
     )
 
-    assert any([x.startswith("https://7.7.7.7:401/soap-api/") for x in data])
+    assert any([x.startswith("https://7.7.7.7:401/ws/") for x in data])
 
 
 def test_clam_av(client, antivir):
     "check clam_av is called"
 
     res = client.post(
-        "https://7.7.7.7:400/soap-api/PHRService/1.3.0",
+        "https://7.7.7.7:400/ws/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=open("avgate/test/retrieveDocumentSet_req.xml", "rb").read(),
     )
@@ -234,7 +234,7 @@ def test_virus_removed(client, antivir):
     )
 
     res = client.post(
-        "/soap-api/PHRService/1.3.0",
+        "/ws/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -271,7 +271,7 @@ def test_virus_replaced(client, antivir):
     )
 
     res = client.post(
-        "/soap-api/PHRService/1.3.0",
+        "/ws/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -307,7 +307,7 @@ def test_virus_replaced_mimetypee(client, antivir):
     )
 
     res = client.post(
-        "/soap-api/PHRService/1.3.0",
+        "/ws/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -342,7 +342,7 @@ def test_virus_replaced_zip(client):
     )
 
     res = client.post(
-        "/soap-api/PHRService/1.3.0",
+        "/ws/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -376,7 +376,7 @@ def test_all_is_virusd(client, antivir):
     )
 
     res = client.post(
-        "/soap-api/PHRService/1.3.0",
+        "/ws/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )
@@ -419,7 +419,7 @@ Content-ID: <root.message@cxf.apache.org>
     )
 
     res = client.post(
-        "/soap-api/PHRService/1.3.0",
+        "/ws/PHRService/1.3.0",
         headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
         data=data,
     )

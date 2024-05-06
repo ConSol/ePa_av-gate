@@ -1,5 +1,5 @@
 #! /bin/bash
-curl -v --location --request POST 'https://127.0.0.1:8443/soap-api/PHRService/1.3.0' \
+curl -v --location --request POST 'https://127.0.0.1:8443/ws/PHRService/1.3.0' \
 --header 'Content-Type: application/xml' \
 --insecure \
 --data-raw '<?xml version="1.0" encoding="UTF-8"?>
