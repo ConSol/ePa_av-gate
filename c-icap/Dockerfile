@@ -15,10 +15,11 @@ RUN apt-get update && \
     sed -i 's/^MaxServers.*/StartServers 1/' /etc/c-icap/c-icap.conf && \
     sed -i 's/^Service echo srv/#Service echo srv/' /etc/c-icap/c-icap.conf && \
     sed -i 's/^Group c-icap/Group nogroup/' /etc/c-icap/c-icap.conf && \
+    # add DebugLevel for details on c-icap
+    # sed -i 's/^DebugLevel.*/DebugLevel 8/' /etc/c-icap/c-icap.conf
+    # remove Allow204As200okZeroEncaps when use 200 instead of 204
     echo "Allow204As200okZeroEncaps on" >> /etc/c-icap/c-icap.conf && \
     echo "Include clamav_mod.conf" >> /etc/c-icap/virus_scan.conf
-
-# remove Allow204As200okZeroEncaps when use 200 instead of 204
 
 ADD ./entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

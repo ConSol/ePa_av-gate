@@ -52,7 +52,6 @@ logger = logging.getLogger(__name__)
 logger.info(f"avgate {__version__}")
 logger.debug(list(config["config"].items()))
 
-
 CONTENT_MAX = config["config"].getint("content_max", 800)
 REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
 ALL_PNG_MALICIOUS = config["config"].getboolean("all_png_malicious", False)
@@ -70,7 +69,7 @@ if config.has_option("config", "clamd_socket"):
 def connector_sds():
     """replace the endpoint for PHRService with our address"""
     # <si:Service Name="PHRService">
-    # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/soap-api/PHRService/1.3.0"/>
+    # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/ws/PHRService/1.3.0"/>
 
     logger.debug(f"Client Cert: {request.headers.get('X-Client-Cert') or None}")
     client_config = get_client_config()
@@ -129,7 +128,9 @@ def health():
 @app.route("/icap")
 def icap():
     """Running tests on icap directly"""
-    return get_icap(EICAR)
+    icap = get_icap(EICAR)
+    logger.debug(f"icap length: {len(icap)}")
+    return icap
 
 
 @app.post("/icap")
@@ -153,7 +154,7 @@ def check():
         cert = None
         if client_config.get("ssl_cert"):
             cert = (client_config["ssl_cert"], client_config["ssl_key"])
-        verify = client_config.get("ssl_verify").lower != "off"
+        verify = client_config.get("ssl_verify", "on").lower() != "off"
 
         try:
             test = requests.request(
@@ -176,7 +177,7 @@ def check():
         except Exception as err:
             err_count += 1
             res += f"{client} {konn}: {err} \n"
-            logger.warn(f"check failed for Konnektor: {client} {konn} {err}")
+            logger.warning(f"check failed for Konnektor: {client} {konn} {err}")
 
     return Response(res, mimetype="text/plain", status=503 if err_count else 200)
 
@@ -186,7 +187,7 @@ def check_clamav() -> str:
     if clamd_path:
         test = clamav_sock.ping()
         if test != "PONG":
-            logger.warn(f"Healtchckeck failed for clamav: {test}")
+            logger.warning(f"Healtchckeck failed for clamav: {test}")
             return "clamav: no ping\n"
 
 
@@ -196,7 +197,7 @@ def check_icap() -> str:
         try:
             scan_file_icap(b"ping\r\n")
         except Exception as err:
-            logger.warn(f"Healtcheck failed for icap: {err}")
+            logger.warning(f"Healtcheck failed for icap: {err}")
             return "icap: failed\n"
 
 
@@ -236,14 +237,14 @@ def request_upstream(client_config, warn=True, stream=False) -> Response:
     """Request to real Konnektor"""
 
     konn = client_config["Konnektor"]
-    url = konn + request.full_path
+    url = konn + request.path
     data = request.get_data()
 
     # client cert
     cert = None
     if client_config.get("ssl_cert"):
         cert = (client_config["ssl_cert"], client_config["ssl_key"])
-    verify = client_config.get("ssl_verify").lower() != "off"
+    verify = client_config.get("ssl_verify", "on").lower() != "off"
 
     headers = {
         key: value
@@ -650,11 +651,11 @@ def scan_file_icap(content: bytes) -> List[str | None]:
 
     # in case of 200 the content should be unchanged
     if content == content_back:
-        logger.warn("ICAP returns 200 instead of 204 on unchanged content")
+        logger.warning("ICAP returns 200 instead of 204 on unchanged content")
         return ["OK", None]
 
     # modified content without infection found
-    logger.warn("ICAP modified content without findings")
+    logger.warning("ICAP modified content without findings")
     logger.debug(f"IN  ...{content[-100:]}")
     logger.debug(f"OUT ...{content_back[-100:]})")
 
@@ -668,20 +669,29 @@ def get_icap(content: bytes) -> bytes:
     icap_port = config["config"].getint("icap_port", 1344)
     icap_tls = config["config"].getboolean("icap_tls", False)
 
+    req_hdr = "GET /resource HTTP/1.1\r\n"
+    req_hdr += f"Host: {request.host}\r\n"
+    req_hdr += "\r\n"
+
+    res_hdr = "HTTP/1.1 200 OK\r\n"
+    res_hdr += f"Content-Length: {len(content)}\r\n"
+    res_hdr += "\r\n"
+
     req = f"RESPMOD {icap_service} ICAP/1.0\r\n"
     req += f"Host: {icap_host}\r\n"
-    req += "Encapsulated: res-body=0\r\n\r\n"
-    req += f"{len(content):x}\r\n"
-    request = req.encode()
-
-    footer = "\r\n0\r\n\r\n".encode()
+    # Encapsulated: lengths in decimal
+    req += f"Encapsulated: req-hdr=0, res-hdr={len(req_hdr)}, res-body={len(req_hdr + res_hdr)}\r\n"
+    req += "\r\n"
 
     rcv_chunks = []
 
     with _open_sock(icap_host, icap_port, icap_tls) as sock:
-        sock.send(request)
+        sock.send(req.encode())
+        sock.send(req_hdr.encode())
+        sock.send(res_hdr.encode())
+        sock.send(f"{len(content):x}\r\n".encode())  # length in hex
         sock.send(content)
-        sock.send(footer)
+        sock.send("\r\n0\r\n\r\n".encode())
 
         while True:
             data = sock.recv(4096)
