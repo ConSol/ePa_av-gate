@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD033 -->
+
 # AV-Gate
 
 Proxy für den Antivirus-Scan von Dokumenten zu der elektronischen Patientenakte (ePa). Dieser Proxy wird zwischen dem Konnektor der Gematik und den Primärsystemen geschaltet und überprüft sämtliche Dokumente der ePA vor der Übertragung an die Primärsysteme.
@@ -111,6 +113,7 @@ In der `avgate.ini` ist für jeden Konnektor eine Gruppe anzulegen. Der Gruppenn
 > Auf die Verwendung von Namen statt IP-Adressen wurde verzichtet, weil ein Großteil der Primärsysteme keine Namen in der Konfiguration verwenden kann.
 
 Für jede Konnektor (jede Gruppe) kann konfiguriert werden:
+
 - konnektor = https://<host>
 - ssl_verify = true
 Die Zertifikate des Konnektors werden auf Gültigkeit überprüft. Verbindungen mit ungültigen (auch selfsigned) Zertifikaten werden abgelehnt.
@@ -181,7 +184,6 @@ Die ENV vars:
 
 - LOG_LEVEL - default INFO
   einer aus DEBUG INFO WARNING ERROR CRITICAL
-
 
 ## Primärsysteme
 

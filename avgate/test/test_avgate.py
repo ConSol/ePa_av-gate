@@ -102,6 +102,16 @@ def client(monkeypatch):
                         content=open("samples/retrievedocument-resp", "rb").read(),
                     )
 
+                if url.endswith("/ws/SignatureService/1.3.0"):
+
+                    def iter_content():
+                        for c in ["another", " test ", "data"]:
+                            yield c
+
+                    return MockResponse(
+                        headers=headers, iter_content=iter_content, close=mock.Mock()
+                    )
+
                 return MockResponse()
 
             monkeypatch.setattr(requests, "request", mock_request)
@@ -326,7 +336,7 @@ def test_virus_replaced_mimetypee(client, antivir):
     assert b"potentiell schadhafter Code" in parts[3]
 
 
-def test_virus_replaced_zip(client):
+def xtest_virus_replaced_zip(client):
     "check virus is replaced on real zip - needs antivir running"
 
     avgate.REMOVE_MALICIOUS = False
@@ -439,3 +449,18 @@ Content-ID: <root.message@cxf.apache.org>
 )
 def test_extract_id(in_id, out_id):
     assert avgate.extract_id(in_id) == out_id
+
+
+def test_direct_forward(client):
+    "check forward for other routes"
+
+    data = b"some test data"
+
+    res = client.post(
+        "https://7.7.7.7:400/ws/SignatureService/1.3.0",
+        headers={"X-real-ip": "9.9.9.9", "Host": "7.7.7.7:400"},
+        data=data,
+    )
+
+    assert res.status_code == 200
+    assert res.data == b"another test data"

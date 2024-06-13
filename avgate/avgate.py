@@ -10,13 +10,13 @@ import socket
 import ssl
 import types
 from email.message import EmailMessage
-from typing import Callable, Generator, List, cast
+from typing import Any, Callable, Generator, List, cast
 from urllib.parse import unquote, urlparse
 
+import flask
 import lxml.etree as ET
 import requests
 import urllib3
-from flask import Flask, Response, abort, request, stream_with_context
 
 __version__ = "1.10"
 
@@ -37,7 +37,7 @@ EICAR = rb"X5O!P%@AP[4\PZX54(P^)7CC)7}" + rb"$EICAR-STANDARD-ANTIVIRUS-TEST-FILE
 # to prevent flooding log
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-app = Flask(__name__)
+app = flask.Flask(__name__)
 
 config = configparser.ConfigParser()
 
@@ -57,6 +57,8 @@ REMOVE_MALICIOUS = config["config"].getboolean("remove_malicious", False)
 ALL_PNG_MALICIOUS = config["config"].getboolean("all_png_malicious", False)
 ALL_PDF_MALICIOUS = config["config"].getboolean("all_pdf_malicious", False)
 
+clamav_sock: Any = None
+
 if config.has_option("config", "clamd_socket"):
     import clamd  # type: ignore
 
@@ -71,7 +73,7 @@ def connector_sds():
     # <si:Service Name="PHRService">
     # <si:EndpointTLS Location="https://kon-instanz1.titus.ti-dienste.de:443/ws/PHRService/1.3.0"/>
 
-    logger.debug(f"Client Cert: {request.headers.get('X-Client-Cert') or None}")
+    logger.debug(f"Client Cert: {flask.request.headers.get('X-Client-Cert') or None}")
     client_config = get_client_config()
     with request_upstream(client_config, warn=False) as upstream:
         xml = ET.fromstring(upstream.content)
@@ -80,7 +82,7 @@ def connector_sds():
             for e in xml.findall("{*}ServiceInformation/{*}Service//{*}EndpointTLS"):
                 previous_url = urlparse(e.attrib["Location"])
                 e.attrib["Location"] = (
-                    f"{previous_url.scheme}://{request.host}{previous_url.path}"
+                    f"{previous_url.scheme}://{flask.request.host}{previous_url.path}"
                 )
 
         for e in xml.findall(
@@ -88,7 +90,7 @@ def connector_sds():
         ):
             previous_url = urlparse(e.attrib["Location"])
             e.attrib["Location"] = (
-                f"{previous_url.scheme}://{request.host}{previous_url.path}"
+                f"{previous_url.scheme}://{flask.request.host}{previous_url.path}"
             )
             global phr_service_path
             phr_service_path = previous_url.path
@@ -118,10 +120,10 @@ def fav():
 @app.route("/health")
 def health():
     """Health check"""
-    res = check_clamav() or ""
-    res += check_icap() or ""
+    res = check_clamav()
+    res += check_icap()
     if res:
-        return Response(res, mimetype="text/plain", status=503)
+        return flask.Response(res, mimetype="text/plain", status=503)
     return "OK\n"
 
 
@@ -136,7 +138,7 @@ def icap():
 @app.post("/icap")
 def icap_post():
     """Running icap with post data"""
-    return get_icap(request.get_data())
+    return get_icap(flask.request.get_data())
 
 
 @app.route("/check")
@@ -158,7 +160,7 @@ def check():
 
         try:
             test = requests.request(
-                method=request.method,
+                method=flask.request.method,
                 url=konn + "/connector.sds",
                 cert=cert,
                 verify=verify,
@@ -179,29 +181,35 @@ def check():
             res += f"{client} {konn}: {err} \n"
             logger.warning(f"check failed for Konnektor: {client} {konn} {err}")
 
-    return Response(res, mimetype="text/plain", status=503 if err_count else 200)
+    return flask.Response(res, mimetype="text/plain", status=503 if err_count else 200)
 
 
 def check_clamav() -> str:
     clamd_path = config["config"].get("clamd_socket")
-    if clamd_path:
-        test = clamav_sock.ping()
-        if test != "PONG":
-            logger.warning(f"Healtchckeck failed for clamav: {test}")
-            return "clamav: no ping\n"
+    if not clamd_path:
+        return ""
+
+    test = clamav_sock.ping()
+    if test != "PONG":
+        logger.warning(f"Healtchckeck failed for clamav: {test}")
+        return "clamav: no ping\n"
+    return ""
 
 
 def check_icap() -> str:
     icap_host = config["config"].get("icap_host")
-    if icap_host:
-        try:
-            scan_file_icap(b"ping\r\n")
-        except Exception as err:
-            logger.warning(f"Healtcheck failed for icap: {err}")
-            return "icap: failed\n"
+    if not icap_host:
+        return ""
+
+    try:
+        scan_file_icap(b"ping\r\n")
+        return ""
+    except Exception as err:
+        logger.warning(f"Healtcheck failed for icap: {err}")
+        return "icap: failed\n"
 
 
-def phr_service() -> Response:
+def phr_service() -> flask.Response:
     """Scan AV on xop documents for retrieveDocumentSetRequest"""
     client_config = get_client_config()
     with request_upstream(client_config) as upstream:
@@ -219,26 +227,22 @@ def phr_service() -> Response:
         return response
 
 
-def other() -> Response:
+def other() -> flask.wrappers.Response:
     """Streamed forward without scan"""
     client_config = get_client_config()
-    upstream = request_upstream(client_config, stream=True)
-
-    def generate():
-        for data in upstream.iter_content():
-            yield data
-        upstream.close()
-
-    response = create_response(generate, upstream)
-    return response
+    with request_upstream(client_config, stream=True) as upstream:
+        response = create_response(upstream.iter_content(), upstream)
+        return response
 
 
-def request_upstream(client_config, warn=True, stream=False) -> Response:
+def request_upstream(
+    client_config, warn=True, stream=False
+) -> requests.models.Response:
     """Request to real Konnektor"""
 
     konn = client_config["Konnektor"]
-    url = konn + request.path
-    data = request.get_data()
+    url = konn + flask.request.path
+    data = flask.request.stream if stream else flask.request.get_data()
 
     # client cert
     cert = None
@@ -248,13 +252,13 @@ def request_upstream(client_config, warn=True, stream=False) -> Response:
 
     headers = {
         key: value
-        for key, value in request.headers.items()
+        for key, value in flask.request.headers.items()
         if key not in ("X-Real-Ip", "Host")
     }
 
     try:
         response = requests.request(
-            method=request.method,
+            method=flask.request.method,
             url=url,
             headers=headers,
             data=data,
@@ -265,26 +269,28 @@ def request_upstream(client_config, warn=True, stream=False) -> Response:
 
         if warn and not stream and bytes(konn, "ascii") in response.content:
             logger.warning(
-                f"Found Konnektor Address in response: {konn} - {request.url}"
+                f"Found Konnektor Address in response: {konn} - {flask.request.url}"
             )
 
         if not response.ok:
             logger.warning(
                 f"Error from Konnektor: {response.url} - {response.status_code} {response.reason}"
             )
-            logger.warning(f"Response: {response.content}")
-            logger.warning(f"Cert: {request.headers.get('X-Client-Cert')}")
+            logger.warning(f"Response: {response.content.decode()}")
+            logger.warning(f"Cert: {flask.request.headers.get('X-Client-Cert')}")
 
         return response
 
     except Exception as err:
         logger.error(err)
-        abort(502)
+        flask.abort(502)
 
 
-def get_client_config() -> configparser.ConfigParser:
-    request_ip = request.headers.get("X-real-ip", request.host.split(":")[0])
-    port = request.host.split(":")[1] if ":" in request.host else "443"
+def get_client_config() -> configparser.SectionProxy:
+    request_ip = flask.request.headers.get(
+        "X-real-ip", flask.request.host.split(":")[0]
+    )
+    port = flask.request.host.split(":")[1] if ":" in flask.request.host else "443"
 
     client = f"{request_ip}:{port}"
     logger.debug(f"client {client}")
@@ -297,10 +303,12 @@ def get_client_config() -> configparser.ConfigParser:
         return config["default"]
     else:
         logger.error(f"Client {client} or default not found in avgate.ini")
-        abort(503)
+        flask.abort(503)
 
 
-def create_response(data, upstream: Response) -> Response:
+def create_response(
+    data, upstream: requests.models.Response
+) -> flask.wrappers.Response:
     """Create new response with copying headers from origin response"""
     headers = {
         k: v
@@ -316,9 +324,9 @@ def create_response(data, upstream: Response) -> Response:
         )
     }
 
-    if type(data) is types.FunctionType:
-        response = Response(
-            stream_with_context(data()),
+    if isinstance(data, types.FunctionType):
+        response = flask.Response(
+            response=flask.stream_with_context(data()),
             status=upstream.status_code,
             headers=headers,
             mimetype=upstream.headers.get("Mimetype"),
@@ -326,7 +334,7 @@ def create_response(data, upstream: Response) -> Response:
             direct_passthrough=True,
         )
     else:
-        response = Response(
+        response = flask.Response(
             response=data,
             status=upstream.status_code,
             headers=headers,
@@ -338,7 +346,7 @@ def create_response(data, upstream: Response) -> Response:
     return response
 
 
-def run_antivirus(res: requests.Response):
+def run_antivirus(res: requests.models.Response):
     """Remove or exchange document when virus was found"""
 
     # only interested in multipart
@@ -533,7 +541,7 @@ def fix_status(xml_resp, xml_errlist, xml_ns, msg):
 
 
 def build_payload(
-    msg: EmailMessage, malicious_content_ids: List[str], res: requests.Response
+    msg: EmailMessage, malicious_content_ids: List[str], res: requests.models.Response
 ) -> bytes:
     """create payload based on original response with replacing only payoad for malicious_content_ids"""
 
@@ -588,7 +596,7 @@ replacement_files = {
 
 def get_replacement(mimetype) -> bytes:
     """get content for replacements"""
-    filename = replacement_files.get(mimetype) or replacement_files.get("text/plain")
+    filename = replacement_files.get(mimetype) or replacement_files["text/plain"]
     with open(filename, "rb") as f:
         return f.read()
 
@@ -623,6 +631,8 @@ def get_file_scanner() -> Callable[[bytes], List[str | None]]:
 
 def scan_file_clamav(content: bytes) -> List[str | None]:
     """return scan result, do use clamav socket"""
+    if not isinstance(clamav_sock, clamd.ClamdUnixSocket):
+        raise AttributeError("clamav socket is not configured")
     scan_res = clamav_sock.instream(io.BytesIO(content))["stream"]
     return scan_res
 
@@ -647,7 +657,7 @@ def scan_file_icap(content: bytes) -> List[str | None]:
 
     # real finding
     if found:
-        return ["FOUND", found[1]]
+        return ["FOUND", found[1].decode()]
 
     # in case of 200 the content should be unchanged
     if content == content_back:
@@ -656,8 +666,8 @@ def scan_file_icap(content: bytes) -> List[str | None]:
 
     # modified content without infection found
     logger.warning("ICAP modified content without findings")
-    logger.debug(f"IN  ...{content[-100:]}")
-    logger.debug(f"OUT ...{content_back[-100:]})")
+    logger.debug(f"IN  ...{content[-100:].decode()}")
+    logger.debug(f"OUT ...{content_back[-100:].decode()})")
 
     return ["OK", None]
 
@@ -670,7 +680,7 @@ def get_icap(content: bytes) -> bytes:
     icap_tls = config["config"].getboolean("icap_tls", False)
 
     req_hdr = "GET /resource HTTP/1.1\r\n"
-    req_hdr += f"Host: {request.host}\r\n"
+    req_hdr += f"Host: {flask.request.host}\r\n"
     req_hdr += "\r\n"
 
     res_hdr = "HTTP/1.1 200 OK\r\n"
@@ -702,7 +712,7 @@ def get_icap(content: bytes) -> bytes:
     return b"".join(rcv_chunks)
 
 
-def _open_sock(host: str, port: int, tls: bool) -> socket:
+def _open_sock(host: str, port: int, tls: bool) -> socket.socket:
     """returns socket, with TLS if needed"""
     if tls:
         with socket.create_connection((host, port)) as sock:
