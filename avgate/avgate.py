@@ -141,6 +141,12 @@ def icap_post():
     return get_icap(flask.request.get_data())
 
 
+@app.post("/scan")
+def scan_post():
+    """Running icap with post data"""
+    return scan_file_icap(flask.request.get_data())
+
+
 @app.route("/check")
 def check():
     """Health check for Konnektors"""
@@ -202,8 +208,8 @@ def check_icap() -> str:
         return ""
 
     try:
-        scan_file_icap(b"ping\r\n")
-        return ""
+        res = scan_file_icap(b"ping\r\n")
+        return "" if res == ["OK", None] else res
     except Exception as err:
         logger.warning(f"Healtcheck failed for icap: {err}")
         return "icap: failed\n"
@@ -650,7 +656,12 @@ def scan_file_icap(content: bytes) -> List[str | None]:
         return ["OK", None]
 
     if first_line != b"ICAP/1.0 200 OK":
-        raise EnvironmentError("ICAP not OK", first_line)
+        raise EnvironmentError("ICAP not OK", first_line.decode())
+
+    if second_block.startswith(b"HTTP/1.1 403 Forbidden"):
+        return ["FORBIDDEN", second_block.decode()]
+
+    # do not expect any other HTTP status inside second_block (rfc3507)
 
     # check infection
     found = re.search(b"X-Infection-Found: .*Threat=(.*);", first_block)

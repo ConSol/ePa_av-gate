@@ -1,4 +1,5 @@
 import re
+import socket
 import xml.etree.ElementTree as ET
 from unittest import mock
 from unittest.mock import Mock
@@ -130,6 +131,36 @@ def antivir(monkeypatch):
             return ("OK", None)
 
     monkeypatch.setattr(avgate, "scan_file", Mock(side_effect=mock_antivir))
+
+
+@pytest.fixture
+def icap_socket(monkeypatch):
+    "Mock ICAP"
+
+    mock_socket = mock.MagicMock(spec=socket.socket)
+
+    mock_socket().__enter__().recv.side_effect = [
+        """ICAP/1.0 200 OK
+Date: Fri, 14 Jun 2024 14:01:45 GMT
+Server: Metadefender ICAP Server
+ISTag: "001718373660"
+X-Response-Info: Blocked
+X-Response-Desc: Error received from Metadefender Core
+Encapsulated: res-hdr=0, res-body=91
+
+HTTP/1.1 403 Forbidden
+Pragma: no-cache
+Content-Type: text/html
+Content-Length: 1641
+
+669
+...
+""".replace(
+            "\n", "\r\n"
+        ).encode(),
+        b"",
+    ]
+    monkeypatch.setattr(avgate, "_open_sock", mock_socket)
 
 
 @pytest.mark.parametrize(
@@ -464,3 +495,11 @@ def test_direct_forward(client):
 
     assert res.status_code == 200
     assert res.data == b"another test data"
+
+
+def test_icap_error(icap_socket, client):
+    "check error response for icap"
+
+    res = client.post("https://7.7.7.7:400/scan", data=b"some test data")
+
+    assert res.data.startswith(b'["FORBIDDEN"')
