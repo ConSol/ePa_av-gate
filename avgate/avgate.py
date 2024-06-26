@@ -18,7 +18,7 @@ import lxml.etree as ET
 import requests
 import urllib3
 
-__version__ = "1.11"
+__version__ = "1.12"
 
 ALL_METHODS = [
     "GET",
