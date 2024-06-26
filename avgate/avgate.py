@@ -658,17 +658,17 @@ def scan_file_icap(content: bytes) -> List[str | None]:
     if first_line != b"ICAP/1.0 200 OK":
         raise EnvironmentError("ICAP not OK", first_line.decode())
 
-    if second_block.startswith(b"HTTP/1.1 403 Forbidden"):
-        return ["FORBIDDEN", second_block.decode()]
-
-    # do not expect any other HTTP status inside second_block (rfc3507)
-
     # check infection
     found = re.search(b"X-Infection-Found: .*Threat=(.*);", first_block)
 
     # real finding
     if found:
         return ["FOUND", found[1].decode()]
+
+    if second_block.startswith(b"HTTP/1.1 403 Forbidden"):
+        return ["FORBIDDEN", second_block.decode()]
+
+    # do not expect any other HTTP status inside second_block (rfc3507)
 
     # in case of 200 the content should be unchanged
     if content == content_back:
