@@ -645,8 +645,6 @@ def scan_file_icap(content: bytes) -> List[str | None]:
     icap_response = get_icap(content)
     (first_block, second_block) = icap_response.split(b"\r\n\r\n", 1)
     first_line = first_block.partition(b"\r\n")[0]
-    FOOTER_LENGTH = 7
-    content_back = second_block.partition(b"\r\n")[2][:-FOOTER_LENGTH]
 
     # check icap status
     if first_line == b"ICAP/1.0 204 No modifications needed":
@@ -668,14 +666,14 @@ def scan_file_icap(content: bytes) -> List[str | None]:
     # do not expect any other HTTP status inside second_block (rfc3507)
 
     # in case of 200 the content should be unchanged
-    if content == content_back:
+    if content in icap_response:
         logger.warning("ICAP returns 200 instead of 204 on unchanged content")
         return ["OK", None]
 
     # modified content without infection found
     logger.warning("ICAP modified content without findings")
     logger.debug(f"IN  ...{content[-100:].decode()}")
-    logger.debug(f"OUT ...{content_back[-100:].decode()})")
+    logger.debug(f"OUT ...{icap_response[-100:].decode()})")
 
     return ["OK", None]
 
