@@ -236,19 +236,17 @@ def phr_service() -> flask.Response:
 def other() -> flask.wrappers.Response:
     """Streamed forward without scan"""
     client_config = get_client_config()
-    with request_upstream(client_config, stream=True) as upstream:
+    with request_upstream(client_config) as upstream:
         response = create_response(upstream.iter_content(), upstream)
         return response
 
 
-def request_upstream(
-    client_config, warn=True, stream=False
-) -> requests.models.Response:
+def request_upstream(client_config, warn=True) -> requests.models.Response:
     """Request to real Konnektor"""
 
     konn = client_config["Konnektor"]
     url = konn + flask.request.path
-    data = flask.request.stream if stream else flask.request.get_data()
+    data = flask.request.get_data()
 
     # client cert
     cert = None
@@ -270,10 +268,9 @@ def request_upstream(
             data=data,
             cert=cert,
             verify=verify,
-            stream=stream,
         )
 
-        if warn and not stream and bytes(konn, "ascii") in response.content:
+        if warn and bytes(konn, "ascii") in response.content:
             logger.warning(
                 f"Found Konnektor Address in response: {konn} - {flask.request.url}"
             )
