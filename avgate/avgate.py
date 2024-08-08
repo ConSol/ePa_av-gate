@@ -138,13 +138,13 @@ def icap():
 @app.post("/icap")
 def icap_post():
     """Running icap with post data"""
-    return get_icap(flask.request.get_data())
+    return get_icap(flask.request.data)
 
 
 @app.post("/scan")
 def scan_post():
     """Running icap with post data"""
-    return scan_file_icap(flask.request.get_data())
+    return scan_file_icap(flask.request.data)
 
 
 @app.route("/check")
@@ -246,7 +246,7 @@ def request_upstream(client_config, warn=True) -> requests.models.Response:
 
     konn = client_config["Konnektor"]
     url = konn + flask.request.path
-    data = flask.request.get_data()
+    data = flask.request.data
 
     # client cert
     cert = None
@@ -279,8 +279,13 @@ def request_upstream(client_config, warn=True) -> requests.models.Response:
             logger.warning(
                 f"Error from Konnektor: {response.url} - {response.status_code} {response.reason}"
             )
-            logger.warning(f"Response: {response.content.decode()}")
-            logger.warning(f"Cert: {flask.request.headers.get('X-Client-Cert')}")
+            logger.debug(f"Origin Headers: {flask.request.headers}")
+            logger.debug(f"Request Headers: {response.request.headers}")
+            logger.debug(f"Response Headers: {response.headers}")
+            logger.debug(f"Origin Cert: {flask.request.headers.get('X-Client-Cert')}")
+            logger.debug(f"Origin Cookies: {list(flask.request.cookies.items())}")
+            logger.debug(f"Request Body: {data}")
+            logger.debug(f"Response Body: {response.content.decode()}")
 
         return response
 
